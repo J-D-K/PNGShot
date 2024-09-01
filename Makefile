@@ -159,6 +159,7 @@ endif
 
 #---------------------------------------------------------------------------------
 all: $(BUILD)
+	@mv ${TARGET}.nsp exefs.nsp
 
 $(BUILD):
 	@[ -d $@ ] || mkdir -p $@
@@ -170,7 +171,7 @@ clean:
 ifeq ($(strip $(APP_JSON)),)
 	@rm -fr $(BUILD) $(TARGET).nro $(TARGET).nacp $(TARGET).elf
 else
-	@rm -fr $(BUILD) $(TARGET).nsp $(TARGET).nso $(TARGET).npdm $(TARGET).elf
+	@rm -fr $(BUILD) exefs.nsp $(TARGET).nso $(TARGET).npdm $(TARGET).elf
 endif
 
 
