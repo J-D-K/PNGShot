@@ -42,6 +42,7 @@ BUILD		:=	build
 SOURCES		:=	source
 DATA		:=	data
 INCLUDES	:=	include
+DIST	:=	dist
 #ROMFS	:=	romfs
 
 #---------------------------------------------------------------------------------
@@ -159,7 +160,16 @@ endif
 
 #---------------------------------------------------------------------------------
 all: $(BUILD)
-	@mv ${TARGET}.nsp exefs.nsp
+#	@mv ${TARGET}.nsp exefs.nsp
+#	@mkdir -p ${DIST}/atmosphere/exefs_patches/vi_patches
+#	@cp patches/* ${DIST}/atmosphere/exefs_patches/vi_patches/
+	@mkdir -p ${DIST}/atmosphere/contents/010000000000C236/flags
+	@touch ${DIST}/atmosphere/contents/010000000000C236/flags/boot2.flag
+	@cp toolbox.json ${DIST}/atmosphere/contents/010000000000C236/toolbox.json
+	@cp ${TARGET}.nsp ${DIST}/atmosphere/contents/010000000000C236/exefs.nsp
+	@cd ${DIST}; zip -q -r ${TARGET}.zip ./*; cd ../;
+	@hactool --disablekeywarns -t nso ${TARGET}.nso
+
 
 $(BUILD):
 	@[ -d $@ ] || mkdir -p $@
@@ -169,9 +179,9 @@ $(BUILD):
 clean:
 	@echo clean ...
 ifeq ($(strip $(APP_JSON)),)
-	@rm -fr $(BUILD) $(TARGET).nro $(TARGET).nacp $(TARGET).elf
+	@rm -fr $(BUILD) $(DIST) $(TARGET).nro $(TARGET).nacp $(TARGET).elf
 else
-	@rm -fr $(BUILD) exefs.nsp $(TARGET).nso $(TARGET).npdm $(TARGET).elf
+	@rm -fr $(BUILD) $(DIST) exefs.nsp $(TARGET).nso $(TARGET).npdm $(TARGET).elf
 endif
 
 
