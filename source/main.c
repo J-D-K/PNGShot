@@ -2,6 +2,7 @@
 #include <png.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <string.h>
 #include <switch.h>
 #include <sys/stat.h>
 #include <time.h>
@@ -110,23 +111,19 @@ inline void generateScreenshotPathAndName(char *pathOut, int maxLength)
     time_t currentTime;
     time(&currentTime);
     struct tm *localTime = localtime(&currentTime);
-    // Sprintf the file name and pray.
-    snprintf(pathOut, maxLength, "sdmc:/switch/PNGShot/%04d%02d%02d%02d%02d%02d.png", localTime->tm_year + 1900, localTime->tm_mon + 1, localTime->tm_mday, localTime->tm_hour, localTime->tm_min, localTime->tm_sec);
+    // Format the file name using strftime.
+    strftime(pathOut, maxLength, "sdmc:/switch/PNGShot/%Y%m%d%H%M%S.png", localTime);
 }
 
 // This is to strip the alpha byte from the raw data. Screenshots are smaller this way and there's no reason to save it.
 // Source is always RGBA comimg from capssc, destination should be 1280 * 3 bytes.
-inline void RGBAToRGB(png_const_bytep sourceData, png_bytep destinationData)
+inline void RGBAToRGB(restrict png_const_bytep sourceData, restrict png_bytep destinationData)
 {
-    for (int i = 0; i < SCREENSHOT_WIDTH * 4; i += 4)
+    // Loop over row. i is for RGBA data, j is for RGB.
+    for (size_t i = 0, j = 0; i < SCREENSHOT_WIDTH * 4; i += 4, j += 3)
     {
-        // Copy RGB
-        for (int j = 0; j < 3; j++)
-        {
-            *destinationData++ = *sourceData++;
-        }
-        // Skip alpha byte
-        sourceData++;
+        // This should be ever-so-slightly faster.
+        memcpy(&destinationData[j], &sourceData[i], 3);
     }
 }
 
