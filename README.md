@@ -34,3 +34,4 @@ git clone --recursive https://github.com/J-D-K/PNGShot
 cd ~/PNGShot
 make -j$(nproc)
 ```
+A folder `dist` is created on the root of repository containing a zip file ready to be installed on the console, also a set of subfolders with the files.
