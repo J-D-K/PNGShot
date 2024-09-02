@@ -12,6 +12,25 @@ While I feel extremely odd about this, you **WILL** need the exefs_patches for [
 
 ## Building
 Requires:
-* devkitpro
-* switch-libpng
-* switch-zlib
+* A working DevKitPro environment, with the packages:
+  * devkitA64
+  * switch-tools
+  * libnx
+  * switch-libpng
+  * switch-zlib
+  * hactool
+* And the System Wide Packages:
+  * git
+  * make
+  * zip
+
+By example on a MSYS's MingW64 environment you can execute the next commands:
+
+```
+pacman -Syuu --needed --noconfirm git make zip devkitA64 switch-tools libnx switch-libpng switch-zlib hactool
+cd ~
+rm -rf ~/PNGShot
+git clone --recursive https://github.com/J-D-K/PNGShot
+cd ~/PNGShot
+make -j$(nproc)
+```
