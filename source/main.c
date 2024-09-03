@@ -77,12 +77,15 @@ void __appInit(void)
     }
 
     initialize = timeInitialize();
-    if (R_FAILED(initialize))
+    if(R_SUCCEEDED(initialize))
+    {
+        __libnx_init_time();
+        timeExit();
+    }
+    else
     {
         diagAbortWithResult(MAKERESULT(Module_Libnx, LibnxError_InitFail_Time));
     }
-
-    __libnx_init_time();
 
     initialize = fsdevMountSdmc();
     if (R_FAILED(initialize))
@@ -99,7 +102,6 @@ void __appExit(void)
 {
     // Just reverse order cause it makes me happy.
     fsdevUnmountAll();
-    timeExit();
     capsscExit();
     fsExit();
     hidsysExit();
