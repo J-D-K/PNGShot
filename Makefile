@@ -181,7 +181,7 @@ clean:
 ifeq ($(strip $(APP_JSON)),)
 	@rm -fr $(BUILD) $(DIST) $(TARGET).nro $(TARGET).nacp $(TARGET).elf
 else
-	@rm -fr $(BUILD) $(DIST) exefs.nsp $(TARGET).nso $(TARGET).npdm $(TARGET).elf
+	@rm -fr $(BUILD) $(DIST) $(TARGET).nsp $(TARGET).nso $(TARGET).npdm $(TARGET).elf
 endif
 
 
