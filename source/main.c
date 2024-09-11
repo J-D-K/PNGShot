@@ -1,7 +1,7 @@
 #include <malloc.h>
 #include <png.h>
-#include <stdio.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 #include <switch.h>
 #include <sys/stat.h>
@@ -15,38 +15,40 @@ uint32_t __nx_fs_num_sessions = 1;
 #define SCREENSHOT_WIDTH 1280
 #define SCREENSHOT_HEIGHT 720
 #define SCREENSHOT_BIT_DEPTH 8
+// The timeout for screen capture
+#define SCREENSHOT_CAPTURE_TIMEOUT 1e+8
 
 // Libnx fake heap stuff for sysmodules
 #define INNER_HEAP_SIZE 0x60000
 
-// This is so we can properly call this function from libnx after the time service is initialized.
+// This is so we can properly call this function from libnx after the time service is Initialized.
 extern void __libnx_init_time(void);
 
 // Initializes heap
 void __libnx_initheap(void)
 {
     // "Heap" memory we're using.
-    static char innerHeap[INNER_HEAP_SIZE];
+    static char InnerHeap[INNER_HEAP_SIZE];
 
     // Pointers to libnx/newlib heap pointers.
     extern char *fake_heap_start, *fake_heap_end;
 
     // Make it point to the place ya know
-    fake_heap_start = innerHeap;
-    fake_heap_end = innerHeap + INNER_HEAP_SIZE;
+    fake_heap_start = InnerHeap;
+    fake_heap_end = InnerHeap + INNER_HEAP_SIZE;
 }
 
 // Init services and stuff needed.
 void __appInit(void)
 {
-    Result initialize = smInitialize();
-    if (R_FAILED(initialize))
+    Result Initialize = smInitialize();
+    if (R_FAILED(Initialize))
     {
         diagAbortWithResult(MAKERESULT(Module_Libnx, LibnxError_InitFail_SM));
     }
 
-    initialize = setsysInitialize();
-    if (R_SUCCEEDED(initialize))
+    Initialize = setsysInitialize();
+    if (R_SUCCEEDED(Initialize))
     {
         SetSysFirmwareVersion firmwareVersion;
         Result setsysError = setsysGetFirmwareVersion(&firmwareVersion);
@@ -57,27 +59,27 @@ void __appInit(void)
         setsysExit();
     }
 
-    initialize = hidsysInitialize();
-    if (R_FAILED(initialize))
+    Initialize = hidsysInitialize();
+    if (R_FAILED(Initialize))
     {
         diagAbortWithResult(MAKERESULT(Module_Libnx, -4));
     }
 
-    initialize = fsInitialize();
-    if (R_FAILED(initialize))
+    Initialize = fsInitialize();
+    if (R_FAILED(Initialize))
     {
         diagAbortWithResult(MAKERESULT(Module_Libnx, LibnxError_InitFail_FS));
     }
 
-    initialize = capsscInitialize();
-    if (R_FAILED(initialize))
+    Initialize = capsscInitialize();
+    if (R_FAILED(Initialize))
     {
         // Just make this one up?
         diagAbortWithResult(MAKERESULT(Module_Libnx, -1));
     }
 
-    initialize = timeInitialize();
-    if(R_SUCCEEDED(initialize))
+    Initialize = timeInitialize();
+    if (R_SUCCEEDED(Initialize))
     {
         __libnx_init_time();
         timeExit();
@@ -87,8 +89,8 @@ void __appInit(void)
         diagAbortWithResult(MAKERESULT(Module_Libnx, LibnxError_InitFail_Time));
     }
 
-    initialize = fsdevMountSdmc();
-    if (R_FAILED(initialize))
+    Initialize = fsdevMountSdmc();
+    if (R_FAILED(Initialize))
     {
         diagAbortWithResult(MAKERESULT(Module_Libnx, -2));
     }
@@ -107,120 +109,134 @@ void __appExit(void)
     hidsysExit();
 }
 
-inline void generateScreenshotPathAndName(char *pathOut, int maxLength)
+// This writes the name of the screenshot to ScreeShotNameBuffer.
+inline void GenerateScreenShotPathAndName(char *ScreenShotNameBuffer, int MaximumLength)
 {
-    // Get local time for name.
-    time_t currentTime;
-    time(&currentTime);
-    struct tm *localTime = localtime(&currentTime);
-    // Format the file name using strftime.
-    strftime(pathOut, maxLength, "sdmc:/switch/PNGShot/%Y%m%d%H%M%S.png", localTime);
+    // Grab local time.
+    time_t Timer;
+    time(&Timer);
+    struct tm *LocalTime = localtime(&Timer);
+    strftime(ScreenShotNameBuffer, MaximumLength, "sdmc:/switch/PNGShot/%Y%m%d%H%M%S.png", LocalTime);
 }
 
-// This is to strip the alpha byte from the raw data. Screenshots are smaller this way and there's no reason to save it.
-// Source is always RGBA comimg from capssc, destination should be 1280 * 3 bytes.
-inline void RGBAToRGB(restrict png_const_bytep sourceData, restrict png_bytep destinationData)
+// This copies RGBADataIn to RGBDataOut, just skipping the alpha byte.
+inline void RGBAToRGB(restrict png_const_bytep RGBADataIn, png_bytep RGBDataOut)
 {
-    // Loop over row. i is for RGBA data, j is for RGB.
     for (size_t i = 0, j = 0; i < SCREENSHOT_WIDTH * 4; i += 4, j += 3)
     {
-        // This should be ever-so-slightly faster.
-        memcpy(&destinationData[j], &sourceData[i], 3);
+        // We're only copying the 3 RGB bytes.
+        memcpy(&RGBDataOut[j], &RGBADataIn[i], 3);
     }
 }
 
-// This function actually captures the screenshot.
-void captureScreenshot(const char *filePath)
+void CaptureScreenShot(const char *PngPath)
 {
-    // These are actually always known, but for some reason capssc needs to write to them?
-    uint64_t captureSize = 0;
-    uint64_t captureWidth = 0;
-    uint64_t captureHeight = 0;
-    // Libpng stuff
-    png_structp pngWriteStruct = NULL;
-    png_infop pngInfoStruct = NULL;
-    png_bytep sourceData = NULL;
-    png_bytep destinationData = NULL;
-    // File we're writing to.
-    FILE *pngFile = NULL;
+    // These are actually always know, and the same, but for some reason we need them to write to?
+    uint64_t CaptureSize = 0;
+    uint64_t CaptureWidth = 0;
+    uint64_t CaptureHeight = 0;
+    // LibPNG Structs and buffers for reading/writing RGB(A) data from system.
+    png_structp PngWritingStruct = NULL;
+    png_infop PngInfoStruct = NULL;
+    png_bytep RGBAData = NULL;
+    png_bytep RGBData = NULL;
+    // File pointer we're going to write to.
+    FILE *PngFile = NULL;
 
-    Result capsscError = capsscOpenRawScreenShotReadStream(&captureSize, &captureWidth, &captureHeight, ViLayerStack_Screenshot, 1e+8);
-    if (R_FAILED(capsscError))
+    // Before anything else, try to get the stream.
+    Result CapsscError = capsscOpenRawScreenShotReadStream(&CaptureSize,
+                                                           &CaptureWidth,
+                                                           &CaptureHeight,
+                                                           ViLayerStack_Screenshot,
+                                                           SCREENSHOT_CAPTURE_TIMEOUT);
+    if (R_FAILED(CapsscError))
     {
-        // Just bail if it failed.
+        // Just bail before anything else takes place.
         return;
     }
 
-    // Init libpng structs.
-    pngWriteStruct = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
-    pngInfoStruct = png_create_info_struct(pngWriteStruct);
-    // Allocate buffers
-    sourceData = malloc(SCREENSHOT_WIDTH * 4);      // This holds RGBA
-    destinationData = malloc(SCREENSHOT_WIDTH * 3); // This holds RGB
-    // Try to open file
-    pngFile = fopen(filePath, "wb");
-    // If anything is NULL, cleanup and bail.
-    if (pngWriteStruct == NULL || pngInfoStruct == NULL || sourceData == NULL || destinationData == NULL || pngFile == NULL)
+    // Try to allocate everything before continuing.
+    PngWritingStruct = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+    PngInfoStruct = png_create_info_struct(PngWritingStruct);
+    RGBAData = malloc((SCREENSHOT_WIDTH * 4) * 2);
+    RGBData = malloc((SCREENSHOT_WIDTH * 3) * 2);
+    PngFile = fopen(PngPath, "wb");
+
+    // If anything failed, goto cleanup.
+    if (PngWritingStruct == NULL || PngInfoStruct == NULL || RGBAData == NULL || RGBData == NULL || PngFile == NULL)
     {
         goto cleanup;
     }
 
-    // Init libpng stuff.
-    png_init_io(pngWriteStruct, pngFile);
-    png_set_IHDR(pngWriteStruct, pngInfoStruct, SCREENSHOT_WIDTH, SCREENSHOT_HEIGHT, SCREENSHOT_BIT_DEPTH, PNG_COLOR_TYPE_RGB, PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
-    png_write_info(pngWriteStruct, pngInfoStruct);
-    // Loop row by row, convert and write.
+    // Get everything ready.
+    png_init_io(PngWritingStruct, PngFile);
+    png_set_IHDR(PngWritingStruct,
+                 PngInfoStruct,
+                 SCREENSHOT_WIDTH,
+                 SCREENSHOT_HEIGHT,
+                 SCREENSHOT_BIT_DEPTH,
+                 PNG_COLOR_TYPE_RGB,
+                 PNG_INTERLACE_NONE,
+                 PNG_COMPRESSION_TYPE_DEFAULT,
+                 PNG_FILTER_TYPE_DEFAULT);
+    png_write_info(PngWritingStruct, PngInfoStruct);
+    // Loop through two rows at a time.
     for (int i = 0; i < SCREENSHOT_HEIGHT; i++)
     {
-        // Number of bytes read from file.
-        uint64_t bytesRead = 0;
-        // Read next row from stream
-        capsscError = capsscReadRawScreenShotReadStream(&bytesRead, sourceData, SCREENSHOT_WIDTH * 4, i * (SCREENSHOT_WIDTH * 4));
-        // Remove alpha value before writing.
-        RGBAToRGB(sourceData, destinationData);
-        // Write to png.
-        png_write_row(pngWriteStruct, destinationData);
+        // Number of bytes read from stream.
+        uint64_t BytesRead = 0;
+        // Try to read from the stream
+        CapsscError =
+            capsscReadRawScreenShotReadStream(&BytesRead, RGBAData, SCREENSHOT_WIDTH * 4, i * (SCREENSHOT_WIDTH * 4));
+        if (R_FAILED(CapsscError))
+        {
+            goto cleanup;
+        }
+        // Remove alpha since there's no point in saving it here.
+        RGBAToRGB(RGBAData, RGBData);
+        // Write the row to file
+        png_write_row(PngWritingStruct, RGBData);
     }
-    // Normally, no but here it's kind of needed.
-    cleanup:
-    png_write_end(pngWriteStruct, pngInfoStruct);
-    png_free_data(pngWriteStruct, pngInfoStruct, PNG_FREE_ALL, -1);
-    png_destroy_write_struct(&pngWriteStruct, &pngInfoStruct);
-    free(sourceData);
-    free(destinationData);
-    fclose(pngFile);
-    // Don't forget to close this if it's open. Should just fail if it failed earlier.
+
+cleanup:
+    png_write_end(PngWritingStruct, PngInfoStruct);
+    png_free_data(PngWritingStruct, PngInfoStruct, PNG_FREE_ALL, -1);
+    png_destroy_write_struct(&PngWritingStruct, &PngInfoStruct);
+    free(RGBAData);
+    free(RGBData);
+    fclose(PngFile);
     capsscCloseRawScreenShotReadStream();
 }
 
 int main(void)
 {
     // Get event handle for capture button
-    Event captureButton;
-    Result hidsysError = hidsysAcquireCaptureButtonEventHandle(&captureButton, false);
-    if (R_FAILED(hidsysError))
+    Event CaptureButton;
+    // Calling this with auto clear fails.
+    Result HidSysError = hidsysAcquireCaptureButtonEventHandle(&CaptureButton, false);
+    if (R_FAILED(HidSysError))
     {
-        // Just silently return and pretend PNGShot was never here to begin with...
+        // Just return and pretend PNGShot was never here to begin with...
         return -1;
     }
-    // Should probably error check that, but meh.
-    eventClear(&captureButton);
+    // Clear event
+    eventClear(&CaptureButton);
 
-    // Make sure base directory exists.
+    // This just assumes the sdmc:/switch folder exists already.
     mkdir("sdmc:/switch/PNGShot", 0777);
 
-    // Loop forever and ever and ever and ever.
+    // Loop forever, waiting for capture button event.
     while (true)
     {
-        if (R_SUCCEEDED(eventWait(&captureButton, UINT64_MAX)))
+        if (R_SUCCEEDED(eventWait(&CaptureButton, UINT64_MAX)))
         {
-            // Clear the event.
-            eventClear(&captureButton);
-            // Generate png name.
-            char screenshotName[FS_MAX_PATH];
-            generateScreenshotPathAndName(screenshotName, FS_MAX_PATH);
-            // Capture the screenshot layer.
-            captureScreenshot(screenshotName);
+            // Clear the event first.
+            eventClear(&CaptureButton);
+            // Get new screenshot name.
+            char PngPath[FS_MAX_PATH];
+            GenerateScreenShotPathAndName(PngPath, FS_MAX_PATH);
+            // Capture
+            CaptureScreenShot(PngPath);
         }
     }
     return 0;

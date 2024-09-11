@@ -1,2 +1,5 @@
 .vscode/
 build/
+.clang-format
+.clang-tidy
+.editorconfig
