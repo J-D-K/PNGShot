@@ -42,7 +42,7 @@ BUILD		:=	build
 SOURCES		:=	source
 DATA		:=	data
 INCLUDES	:=	include
-DIST	:=	dist
+DIST		:=	dist
 #ROMFS	:=	romfs
 
 #---------------------------------------------------------------------------------
@@ -54,6 +54,11 @@ CFLAGS	:=	-g -Wall -O2 -ffunction-sections \
 			$(ARCH) $(DEFINES)
 
 CFLAGS	+=	$(INCLUDE) -D__SWITCH__
+
+# If the makefile is run with EXPERIMENTAL=true
+ifeq (${EXPERIMENTAL}, true)
+	CFLAGS	+= -DEXPERIMENTAL
+endif
 
 CXXFLAGS	:= $(CFLAGS) -fno-rtti -fno-exceptions
 
