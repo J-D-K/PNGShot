@@ -4,6 +4,11 @@
 #include <string.h>
 #include <switch.h>
 
+// This is used to jump to the cleanup label
+#define GoToCleanupIf(x)                                                                                               \
+    if (x)                                                                                                             \
+    goto cleanup
+
 // Just in case this stuff changes.
 #define SCREENSHOT_WIDTH 1280
 #define SCREENSHOT_HEIGHT 720
@@ -12,6 +17,21 @@
 #define SCREENSHOT_CAPTURE_TIMEOUT 1e+8
 
 // This copies RGBADataIn to RGBDataOut, just skipping the alpha byte.
+#ifdef EXPERIMENTAL
+static inline void RGBAToRGB(restrict png_const_bytep RGBADataIn, png_bytepp RGBDataOut)
+{
+    size_t i = 0;
+    // Loop through array of rows
+    for (int currentRow = 0; currentRow < SCREENSHOT_HEIGHT; currentRow++)
+    {
+        png_bytep row = RGBDataOut[currentRow];
+        for (size_t j = 0; j < SCREENSHOT_WIDTH * 3; j += 3, i += 4)
+        {
+            memcpy(&row[j], &RGBADataIn[i], 3);
+        }
+    }
+}
+#else
 static inline void RGBAToRGB(restrict png_const_bytep RGBADataIn, png_bytep RGBDataOut)
 {
     for (size_t i = 0, j = 0; i < SCREENSHOT_WIDTH * 4; i += 4, j += 3)
@@ -20,6 +40,7 @@ static inline void RGBAToRGB(restrict png_const_bytep RGBADataIn, png_bytep RGBD
         memcpy(&RGBDataOut[j], &RGBADataIn[i], 3);
     }
 }
+#endif
 
 // Which one gets used depends on flag sent to makefile
 #ifdef EXPERIMENTAL
@@ -34,7 +55,7 @@ void CaptureScreenShot(const char *PngPath)
     png_structp PngWritingStruct = NULL;
     png_infop PngInfoStruct = NULL;
     png_bytep RGBAData = NULL;
-    png_bytep RGBData = NULL;
+    png_bytepp RGBData = NULL;
     // File pointer we're going to write to.
     FILE *PngFile = NULL;
 
@@ -54,20 +75,29 @@ void CaptureScreenShot(const char *PngPath)
     PngWritingStruct = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
     PngInfoStruct = png_create_info_struct(PngWritingStruct);
     RGBAData = malloc(CaptureSize);
-    RGBData = malloc(SCREENSHOT_WIDTH * 3);
-    PngFile = fopen(PngPath, "wb");
+    // If any of this is null, cleanup
+    GoToCleanupIf(PngWritingStruct == NULL || PngInfoStruct == NULL || RGBAData == NULL);
 
-    // If anything failed, goto cleanup.
-    if (PngWritingStruct == NULL || PngInfoStruct == NULL || RGBAData == NULL || RGBData == NULL || PngFile == NULL)
+    // This needs to be an array for png_write_image
+    RGBData = malloc(sizeof(png_bytep *) * SCREENSHOT_HEIGHT);
+    GoToCleanupIf(RGBData == NULL);
+
+    // Init each row
+    for (int i = 0; i < SCREENSHOT_HEIGHT; i++)
     {
-        goto cleanup;
+        RGBData[i] = malloc(SCREENSHOT_WIDTH * 3);
+        GoToCleanupIf(RGBAData == NULL);
     }
+
+    // Try to open file for writing.
+    PngFile = fopen(PngPath, "wb");
+    GoToCleanupIf(PngFile == NULL);
 
     // Bytes read.
     uint64_t BytesRead = 0;
     // Read stream to RGBA Buffer
     CapsscError = capsscReadRawScreenShotReadStream(&BytesRead, RGBAData, CaptureSize, 0);
-    if(R_FAILED(CapsscError))
+    if (R_FAILED(CapsscError))
     {
         goto cleanup;
     }
@@ -86,25 +116,23 @@ void CaptureScreenShot(const char *PngPath)
                  PNG_COMPRESSION_TYPE_DEFAULT,
                  PNG_FILTER_TYPE_DEFAULT);
     png_write_info(PngWritingStruct, PngInfoStruct);
-    // Loop through row by row.
-    for (int i = 0; i < SCREENSHOT_HEIGHT; i++)
-    {
-        // Offset in RGBAData buffer to use
-        size_t RGBAOffset = i * (SCREENSHOT_WIDTH * 4);
-        // Remove alpha since there's no point in saving it here.
-        RGBAToRGB(&RGBAData[RGBAOffset], RGBData);
-        // Write the row to file
-        png_write_row(PngWritingStruct, RGBData);
-    }
+    // Convert RGBA to RGB
+    RGBAToRGB(RGBAData, RGBData);
+    // Write image
+    png_write_image(PngWritingStruct, RGBData);
 
 cleanup:
     png_write_end(PngWritingStruct, PngInfoStruct);
     png_free_data(PngWritingStruct, PngInfoStruct, PNG_FREE_ALL, -1);
     png_destroy_write_struct(&PngWritingStruct, &PngInfoStruct);
     free(RGBAData);
+    // Free array of rows.
+    for (int i = 0; i < SCREENSHOT_HEIGHT; i++)
+    {
+        free(RGBData[i]);
+    }
     free(RGBData);
     fclose(PngFile);
-    capsscCloseRawScreenShotReadStream();
 }
 #else
 void CaptureScreenShot(const char *PngPath)

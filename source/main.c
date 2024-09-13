@@ -10,7 +10,7 @@ uint32_t __nx_fs_num_sessions = 1;
 
 // Experimental build buffers the entire screenshot stream and needs more memory to work with.
 #ifdef EXPERIMENTAL
-#define INNER_HEAP_SIZE 0x3E4000
+#define INNER_HEAP_SIZE 0x687000
 #else
 #define INNER_HEAP_SIZE 0x60000
 #endif
