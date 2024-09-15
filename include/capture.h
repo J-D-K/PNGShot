@@ -1,3 +1,3 @@
 #pragma once
 
-void CaptureScreenShot(const char *PngPath);
+void captureScreenshot(const char *filePath);
