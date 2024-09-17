@@ -5,8 +5,8 @@
 #include <time.h>
 
 // Macro to fail with. Not the right error code but whatever.
-#define ABORT_ON_FAILURE(x)                                                                                            \
-    if (R_FAILED(x))                                                                                                   \
+#define ABORT_ON_FAILURE(x)                                                                                                                    \
+    if (R_FAILED(x))                                                                                                                           \
     diagAbortWithResult(MAKERESULT(Module_Libnx, x))
 
 // Libnx sysmodule stuff.
@@ -38,7 +38,7 @@ void __libnx_initheap(void)
 }
 
 // I just think this looks a bit nicer?
-inline void initLibnxFirmwareVersion(void)
+static inline void initLibnxFirmwareVersion(void)
 {
     if (R_SUCCEEDED(setsysInitialize()))
     {
@@ -51,7 +51,7 @@ inline void initLibnxFirmwareVersion(void)
     }
 }
 
-inline void initLibnxTime(void)
+static inline void initLibnxTime(void)
 {
     ABORT_ON_FAILURE(timeInitialize());
     __libnx_init_time();
@@ -65,7 +65,6 @@ void __appInit(void)
     initLibnxTime();
     ABORT_ON_FAILURE(hidsysInitialize());
     ABORT_ON_FAILURE(fsInitialize());
-    ABORT_ON_FAILURE(fsdevMountSdmc());
     ABORT_ON_FAILURE(capsscInitialize());
     // Exit sm, it's not needed anymore.
     smExit();
@@ -79,13 +78,41 @@ void __appExit(void)
     hidsysExit();
 }
 
+// This tries to open the album directory first on SD, if that fails, NAND.
+static inline Result openAlbumDirectory(FsFileSystem *filesystem)
+{
+    // Try to open SD album first. If it fails, fall back to NAND.
+    Result fsError = fsOpenImageDirectoryFileSystem(filesystem, FsImageDirectoryId_Sd);
+    if(R_FAILED(fsError))
+    {
+        fsError = fsOpenImageDirectoryFileSystem(filesystem, FsImageDirectoryId_Nand);
+    }
+    return fsError;
+}
+
+// This checks for and creates the PNGShot directory if it doesn't exist.
+static inline Result createPNGShotDirectory(FsFileSystem *filesystem)
+{
+    // Check if it exists first.
+    FsDir directoryHandle;
+    Result fsError = fsFsOpenDirectory(filesystem, "/PNGs", FsDirOpenMode_ReadDirs | FsDirOpenMode_ReadFiles, &directoryHandle);
+    if(R_FAILED(fsError))
+    {
+        // If it failed, assume it doesn't exist and try to create it.
+        fsError = fsFsCreateDirectory(filesystem, "/PNGs");
+    }
+    // Close it if it's open.
+    fsDirClose(&directoryHandle);
+    return fsError;
+}
+
 // This writes the name of the screenshot to ScreeShotNameBuffer.
-inline void generateScreenShotName(char *pathOut, int pathMaxLength)
+static inline void generateScreenShotName(char *pathOut, int pathMaxLength)
 {
     // Grab local time.
     time_t timer;
     time(&timer);
-    strftime(pathOut, pathMaxLength, "sdmc:/switch/PNGShot/%Y%m%d%H%M%S.png", localtime(&timer));
+    strftime(pathOut, pathMaxLength, "/PNGs/%Y%m%d%H%M%S.png", localtime(&timer));
 }
 
 int main(void)
@@ -96,8 +123,10 @@ int main(void)
     ABORT_ON_FAILURE(hidsysAcquireCaptureButtonEventHandle(&captureButtonEvent, false));
     eventClear(&captureButtonEvent);
 
-    // This just assumes the sdmc:/switch folder exists already.
-    mkdir("sdmc:/switch/PNGShot", 0777);
+    // Open album directory and make sure folder exists.
+    FsFileSystem albumDirectory;
+    ABORT_ON_FAILURE(openAlbumDirectory(&albumDirectory));
+    ABORT_ON_FAILURE(createPNGShotDirectory(&albumDirectory));
 
     // Loop forever, waiting for capture button event.
     while (true)
@@ -110,7 +139,7 @@ int main(void)
             char screenshotPath[FS_MAX_PATH];
             generateScreenShotName(screenshotPath, FS_MAX_PATH);
             // Capture
-            captureScreenshot(screenshotPath);
+            captureScreenshot(&albumDirectory, screenshotPath);
         }
     }
     return 0;

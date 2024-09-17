@@ -1,3 +1,4 @@
 #pragma once
+#include <switch.h>
 
-void captureScreenshot(const char *filePath);
+void captureScreenshot(FsFileSystem *filesystem, const char *filePath);

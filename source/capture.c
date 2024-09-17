@@ -1,3 +1,4 @@
+#include "fsfile.h"
 #include <malloc.h>
 #include <png.h>
 #include <stdint.h>
@@ -5,17 +6,17 @@
 #include <switch.h>
 
 // This is used to jump to the cleanup label.
-#define CLEANUP_AND_ABORT_IF(x)                                                                                        \
-    if (x)                                                                                                             \
+#define CLEANUP_AND_ABORT_IF(x)                                                                                                                \
+    if (x)                                                                                                                                     \
     goto cleanup
 
 // This returns from the funtion.
-#define RETURN_ON_FAILURE(x)                                                                                           \
-    if (R_FAILED(x))                                                                                                   \
+#define RETURN_ON_FAILURE(x)                                                                                                                   \
+    if (R_FAILED(x))                                                                                                                           \
     return
 
-#define CLEANUP_AND_ABORT_ON_FAILURE(x)                                                                                \
-    if (R_FAILED(x))                                                                                                   \
+#define CLEANUP_AND_ABORT_ON_FAILURE(x)                                                                                                        \
+    if (R_FAILED(x))                                                                                                                           \
     goto cleanup
 
 // Just in case this stuff changes.
@@ -25,16 +26,27 @@
 // The timeout for screen capture
 #define SCREENSHOT_CAPTURE_TIMEOUT 1e+8
 
+// These functions are needed so we can use libpng with libnx's file functions.
+void pngWriteFunction(png_structp writingStruct, png_bytep pngData, png_size_t length)
+{
+    FSFILEWrite((FSFILE *)png_get_io_ptr(writingStruct), pngData, length);
+}
+
+void pngFlushFunction(png_structp writingStruct)
+{
+    FSFILEFlush((FSFILE *)png_get_io_ptr(writingStruct));
+}
+
 // Lib png functions.
 void initLibPNGStructs(png_structpp writingStruct, png_infopp infoStruct)
 {
     *writingStruct = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
     *infoStruct = png_create_info_struct(*writingStruct);
 }
-
-void pngInitIOAndWriteInfo(png_structp writingStruct, png_infop infoStruct, FILE *file)
+//
+void pngInitIOAndWriteInfo(png_structp writingStruct, png_infop infoStruct, FSFILE *pngFile)
 {
-    png_init_io(writingStruct, file);
+    png_set_write_fn(writingStruct, pngFile, pngWriteFunction, pngFlushFunction);
     png_set_IHDR(writingStruct,
                  infoStruct,
                  SCREENSHOT_WIDTH,
@@ -66,8 +78,7 @@ static inline void rgbaToRGB(restrict png_const_bytep streamCaptureBuffer, restr
 #else
 static inline void rgbaToRGB(restrict png_const_bytep sourceRow, restrict png_bytep destinationRow)
 {
-    for (size_t sourceOffset = 0, destinationOffset = 0; sourceOffset < SCREENSHOT_WIDTH * 4;
-         sourceOffset += 4, destinationOffset += 3)
+    for (size_t sourceOffset = 0, destinationOffset = 0; sourceOffset < SCREENSHOT_WIDTH * 4; sourceOffset += 4, destinationOffset += 3)
     {
         // Copy skipping alpha byte.
         memcpy(&destinationRow[destinationOffset], &sourceRow[sourceOffset], 3);
@@ -78,7 +89,7 @@ static inline void rgbaToRGB(restrict png_const_bytep sourceRow, restrict png_by
 // Which one gets used depends on flag sent to makefile
 #ifdef EXPERIMENTAL
 // To do: Clean this version up to look nicer.
-void captureScreenshot(const char *filePath)
+void captureScreenshot(FsFileSystem *filesystem, const char *filePath)
 {
     // These are actually always known and the same, but for some reason we need them to write to?
     uint64_t captureSize = 0;
@@ -90,14 +101,11 @@ void captureScreenshot(const char *filePath)
     png_bytep captureBuffer = NULL;
     png_bytepp rgbRows = NULL;
     // File we're writing to.
-    FILE *pngFile = NULL;
+    FSFILE *pngFile = NULL;
 
     // Function immediately returns if this fails.
-    RETURN_ON_FAILURE(capsscOpenRawScreenShotReadStream(&captureSize,
-                                                        &captureWidth,
-                                                        &captureHeight,
-                                                        ViLayerStack_Screenshot,
-                                                        SCREENSHOT_CAPTURE_TIMEOUT));
+    RETURN_ON_FAILURE(
+        capsscOpenRawScreenShotReadStream(&captureSize, &captureWidth, &captureHeight, ViLayerStack_Screenshot, SCREENSHOT_CAPTURE_TIMEOUT));
 
     // Try to allocate and initialize libpng before continuing.
     initLibPNGStructs(&pngWritingStruct, &pngInfoStruct);
@@ -118,7 +126,7 @@ void captureScreenshot(const char *filePath)
     }
 
     // Try to open output file.
-    pngFile = fopen(filePath, "wb");
+    pngFile = FSFILEOpen(filesystem, filePath);
     CLEANUP_AND_ABORT_IF(pngFile == NULL);
 
     // Bytes read from stream.
@@ -149,11 +157,11 @@ cleanup:
         }
     }
     free(rgbRows);
-    fclose(pngFile);
+    FSFILEClose(pngFile);
 }
 #else
 // Same as above, but safer and less memory hungry for a Switch sysmodule
-void captureScreenshot(const char *filePath)
+void captureScreenshot(FsFileSystem *filesystem, const char *filePath)
 {
     uint64_t captureSize = 0;
     uint64_t captureWidth = 0;
@@ -162,13 +170,10 @@ void captureScreenshot(const char *filePath)
     png_infop pngInfoStruct = NULL;
     png_bytep sourceRow = NULL;
     png_bytep destinationRow = NULL;
-    FILE *pngFile = NULL;
+    FSFILE *pngFile = NULL;
 
-    RETURN_ON_FAILURE(capsscOpenRawScreenShotReadStream(&captureSize,
-                                                        &captureWidth,
-                                                        &captureHeight,
-                                                        ViLayerStack_Screenshot,
-                                                        SCREENSHOT_CAPTURE_TIMEOUT));
+    RETURN_ON_FAILURE(
+        capsscOpenRawScreenShotReadStream(&captureSize, &captureWidth, &captureHeight, ViLayerStack_Screenshot, SCREENSHOT_CAPTURE_TIMEOUT));
 
     initLibPNGStructs(&pngWritingStruct, &pngInfoStruct);
     CLEANUP_AND_ABORT_IF(pngWritingStruct == NULL || pngInfoStruct == NULL);
@@ -177,7 +182,7 @@ void captureScreenshot(const char *filePath)
     destinationRow = malloc(SCREENSHOT_WIDTH * 3);
     CLEANUP_AND_ABORT_IF(sourceRow == NULL || destinationRow == NULL);
 
-    pngFile = fopen(filePath, "wb");
+    pngFile = FSFILEOpen(filesystem, filePath);
     CLEANUP_AND_ABORT_IF(pngFile == NULL);
 
     // Start writing png
@@ -197,7 +202,7 @@ cleanup:
     png_destroy_write_struct(&pngWritingStruct, &pngInfoStruct);
     free(sourceRow);
     free(destinationRow);
-    fclose(pngFile);
+    FSFILEClose(pngFile);
     capsscCloseRawScreenShotReadStream();
 }
 #endif
