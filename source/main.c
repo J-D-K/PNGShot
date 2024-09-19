@@ -119,7 +119,7 @@ int main(void)
 {
     // Get event handle for capture button
     Event captureButtonEvent;
-    // Calling this with auto clear fails.
+    // Calling this with auto-clear fails.
     ABORT_ON_FAILURE(hidsysAcquireCaptureButtonEventHandle(&captureButtonEvent, false));
     eventClear(&captureButtonEvent);
 
@@ -128,19 +128,56 @@ int main(void)
     ABORT_ON_FAILURE(openAlbumDirectory(&albumDirectory));
     ABORT_ON_FAILURE(createPNGShotDirectory(&albumDirectory));
 
+    bool held = false;            // Track if the button is held
+    u64 start_tick = 0;           // Time when the button press started
+
     // Loop forever, waiting for capture button event.
     while (true)
     {
-        if (R_SUCCEEDED(eventWait(&captureButtonEvent, UINT64_MAX)))
+        // Check for button press event
+        if (R_SUCCEEDED(eventWait(&captureButtonEvent, 17000000))) // Wait for a short time to capture quick presses
         {
-            // Clear
             eventClear(&captureButtonEvent);
-            // Get path
-            char screenshotPath[FS_MAX_PATH];
-            generateScreenShotName(screenshotPath, FS_MAX_PATH);
-            // Capture
-            captureScreenshot(&albumDirectory, screenshotPath);
+    
+            if (!held)
+            {
+                // If button was not already held, start holding
+                held = true;
+                start_tick = armGetSystemTick();
+            }
+            else
+            {
+                // If button was already held and now released
+                u64 elapsed_ns = armTicksToNs(armGetSystemTick() - start_tick);
+    
+                if (elapsed_ns >= 50000000 && elapsed_ns < 500000000) // Between 50 ms and 500 ms
+                {
+                    // Valid quick press detected, proceed to capture screenshot
+                    char screenshotPath[FS_MAX_PATH];
+                    generateScreenShotName(screenshotPath, FS_MAX_PATH);
+                    captureScreenshot(&albumDirectory, screenshotPath);
+                }
+    
+                // Reset the state
+                held = false;
+                start_tick = 0;
+            }
+        }
+        else if (held)
+        {
+            // If the button was held for more than 500 ms, reset
+            u64 elapsed_ns = armTicksToNs(armGetSystemTick() - start_tick);
+    
+            if (elapsed_ns > 500000000) // More than 500 ms
+            {
+                // Long press detected, ignore as a quick press
+                held = false;
+                start_tick = 0;
+            }
         }
     }
+    
     return 0;
+    
 }
+
