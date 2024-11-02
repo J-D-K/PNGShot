@@ -76,14 +76,14 @@ static inline void rgbaToRGB(restrict png_const_bytep streamCaptureBuffer, restr
     }
 }
 #else
-//static inline void rgbaToRGB(restrict png_const_bytep sourceRow, restrict png_bytep destinationRow)
-//{
-//    for (size_t sourceOffset = 0, destinationOffset = 0; sourceOffset < SCREENSHOT_WIDTH * 4; sourceOffset += 4, destinationOffset += 3)
-//    {
-//        // Copy skipping alpha byte.
-//        memcpy(&destinationRow[destinationOffset], &sourceRow[sourceOffset], 3);
-//    }
-//}
+static inline void rgbaToRGB(restrict png_const_bytep sourceRow, restrict png_bytep destinationRow)
+{
+    for (size_t sourceOffset = 0, destinationOffset = 0; sourceOffset < SCREENSHOT_WIDTH * 4; sourceOffset += 4, destinationOffset += 3)
+    {
+        // Copy skipping alpha byte.
+        memcpy(&destinationRow[destinationOffset], &sourceRow[sourceOffset], 3);
+    }
+}
 #endif
 
 // Which one gets used depends on flag sent to makefile
@@ -169,6 +169,7 @@ void captureScreenshot(FsFileSystem *filesystem, const char *filePath)
     png_structp pngWritingStruct = NULL;
     png_infop pngInfoStruct = NULL;
     png_bytep sourceRow = NULL;
+    png_bytep destinationRow = NULL;
     FSFILE *pngFile = NULL;
 
     RETURN_ON_FAILURE(
@@ -177,31 +178,30 @@ void captureScreenshot(FsFileSystem *filesystem, const char *filePath)
     initLibPNGStructs(&pngWritingStruct, &pngInfoStruct);
     CLEANUP_AND_ABORT_IF(pngWritingStruct == NULL || pngInfoStruct == NULL);
 
-    sourceRow = malloc(SCREENSHOT_WIDTH * 4); // RGBA buffer
-    CLEANUP_AND_ABORT_IF(sourceRow == NULL);
+    sourceRow = malloc(SCREENSHOT_WIDTH * 4);
+    destinationRow = malloc(SCREENSHOT_WIDTH * 3);
+    CLEANUP_AND_ABORT_IF(sourceRow == NULL || destinationRow == NULL);
 
     pngFile = FSFILEOpen(filesystem, filePath);
     CLEANUP_AND_ABORT_IF(pngFile == NULL);
 
-    // Start writing PNG
+    // Start writing png
     pngInitIOAndWriteInfo(pngWritingStruct, pngInfoStruct, pngFile);
-
-    // Loop through each row
+    // Loop through row by row
     for (size_t i = 0; i < SCREENSHOT_HEIGHT; i++)
     {
         uint64_t bytesRead = 0;
         CLEANUP_AND_ABORT_ON_FAILURE(
             capsscReadRawScreenShotReadStream(&bytesRead, sourceRow, SCREENSHOT_WIDTH * 4, i * (SCREENSHOT_WIDTH * 4)));
-        
-        // Write RGBA row directly; libpng will strip alpha channel
-        png_write_row(pngWritingStruct, sourceRow);
+        rgbaToRGB(sourceRow, destinationRow);
+        png_write_row(pngWritingStruct, destinationRow);
     }
-
 cleanup:
     png_write_end(pngWritingStruct, pngInfoStruct);
     png_free_data(pngWritingStruct, pngInfoStruct, PNG_FREE_ALL, -1);
     png_destroy_write_struct(&pngWritingStruct, &pngInfoStruct);
     free(sourceRow);
+    free(destinationRow);
     FSFILEClose(pngFile);
     capsscCloseRawScreenShotReadStream();
 }
