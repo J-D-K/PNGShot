@@ -150,7 +150,7 @@ int main(void)
                 // If button was already held and now released
                 u64 elapsed_ns = armTicksToNs(armGetSystemTick() - start_tick);
     
-                if (elapsed_ns >= 50000000 && elapsed_ns < 200000000) // Between 50 ms and 500 ms
+                if (elapsed_ns >= 50000000 && elapsed_ns < 160000000) // Between 50 ms and 160 ms
                 {
                     // Valid quick press detected, proceed to capture screenshot
                     char screenshotPath[FS_MAX_PATH];
@@ -159,6 +159,18 @@ int main(void)
                 }
     
                 // Reset the state
+                held = false;
+                start_tick = 0;
+            }
+        }
+        else if (held)
+        {
+            // If the button was held for more than 160 ms, reset
+            u64 elapsed_ns = armTicksToNs(armGetSystemTick() - start_tick);
+        
+            if (elapsed_ns > 160000000) // More than 160 ms
+            {
+                // Long press detected, ignore as a quick press
                 held = false;
                 start_tick = 0;
             }
