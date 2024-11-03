@@ -21,7 +21,7 @@ uint32_t __nx_fs_num_sessions = 1;
 #endif
 
 // This is so we can properly call this function from libnx after the time service is Initialized.
-extern void __libnx_init_time(void);
+//extern void __libnx_init_time(void);
 
 // Initializes heap
 void __libnx_initheap(void)
@@ -138,9 +138,9 @@ int main(void)
     while (true)
     {
         // Check for button press event
-        if (R_SUCCEEDED(eventWait(&captureButtonEvent, 100000000))) // Wait for a short time to capture quick presses
+        if (R_SUCCEEDED(eventWait(&captureButtonEvent, 3600000000000))) // increased to 1 hour (longer the better here)
         {
-            
+            eventClear(&captureButtonEvent);
     
             if (!held)
             {
@@ -167,7 +167,7 @@ int main(void)
                 // Reset the state
                 held = false;
                 start_tick = 0;
-                eventClear(&captureButtonEvent);
+                
             }
         }
         else if (held)
