@@ -50,20 +50,31 @@ DIST		:=	dist
 #---------------------------------------------------------------------------------
 ARCH	:=	-march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE
 
-CFLAGS	:=	-g -Wall -O2 -ffunction-sections \
+CFLAGS	:=	-g -Wall -Os -ffunction-sections -fdata-sections -flto -fomit-frame-pointer -finline-small-functions\
 			$(ARCH) $(DEFINES)
 
 CFLAGS	+=	$(INCLUDE) -D__SWITCH__
 
 # If the makefile is run with EXPERIMENTAL=true
-ifeq (${EXPERIMENTAL}, true)
-	CFLAGS	+= -DEXPERIMENTAL
-endif
+#ifeq (${EXPERIMENTAL}, true)
+#	CFLAGS	+= -DEXPERIMENTAL
+#endif
 
-CXXFLAGS	:= $(CFLAGS) -fno-rtti -fno-exceptions
+# For no jpg duplicates
+NO_JPG_DIRECTIVE := 1
+CFLAGS += -DNO_JPG_DIRECTIVE=$(NO_JPG_DIRECTIVE)
+
+
+CXXFLAGS	:= $(CFLAGS) -fno-rtti -fno-exceptions  -fno-unwind-tables -fno-asynchronous-unwind-tables
 
 ASFLAGS	:=	-g $(ARCH)
 LDFLAGS	=	-specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
+LDFLAGS += -Wl,--as-needed
+
+
+# For Ensuring Parallel LTRANS Jobs w/ GCC, make -j6
+CXXFLAGS += -flto -fuse-linker-plugin -flto=6
+LDFLAGS += -flto=6
 
 LIBS	:= -lnx -lpng -lz
 
