@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <switch.h>
+#include <ctype.h>      // Include for tolower
 
 // This is used to jump to the cleanup label.
 #define CLEANUP_AND_ABORT_IF(x)                                                                                                                \
@@ -160,6 +161,88 @@ cleanup:
     FSFILEClose(pngFile);
 }
 #else
+
+#if NO_JPG_DIRECTIVE
+// Function to find and delete the newest .jpg in the Album directory
+void deleteNewestJpg(FsFileSystem *albumDirectory)
+{
+    FsDir rootDir;
+    FsDirectoryEntry rootEntry;
+    char latestFilePath[FS_MAX_PATH] = {0};
+    u64 latestTimestamp = 0;
+
+    // Open the Album directory
+    if (R_FAILED(fsFsOpenDirectory(albumDirectory, "/", FsDirOpenMode_ReadDirs, &rootDir))) {
+        return;
+    }
+
+    s64 entriesRead = 0;
+    // Traverse the Album folder structure
+    while (R_SUCCEEDED(fsDirRead(&rootDir, &entriesRead, 1, &rootEntry)) && entriesRead > 0) {
+        if (rootEntry.type != FsDirEntryType_Dir) continue;
+
+        char yearFolder[FS_MAX_PATH];
+        snprintf(yearFolder, FS_MAX_PATH, "/%s", rootEntry.name);
+        FsDir yearDir;
+        if (R_FAILED(fsFsOpenDirectory(albumDirectory, yearFolder, FsDirOpenMode_ReadDirs, &yearDir))) continue;
+
+        FsDirectoryEntry monthEntry;
+        s64 monthEntriesRead = 0;
+        while (R_SUCCEEDED(fsDirRead(&yearDir, &monthEntriesRead, 1, &monthEntry)) && monthEntriesRead > 0) {
+            if (monthEntry.type != FsDirEntryType_Dir) continue;
+
+            char monthFolder[FS_MAX_PATH];
+            snprintf(monthFolder, FS_MAX_PATH, "%s/%s", yearFolder, monthEntry.name);
+            FsDir monthDir;
+            if (R_FAILED(fsFsOpenDirectory(albumDirectory, monthFolder, FsDirOpenMode_ReadDirs, &monthDir))) continue;
+
+            FsDirectoryEntry dayEntry;
+            s64 dayEntriesRead = 0;
+            while (R_SUCCEEDED(fsDirRead(&monthDir, &dayEntriesRead, 1, &dayEntry)) && dayEntriesRead > 0) {
+                if (dayEntry.type != FsDirEntryType_Dir) continue;
+
+                char dayFolder[FS_MAX_PATH];
+                snprintf(dayFolder, FS_MAX_PATH, "%s/%s", monthFolder, dayEntry.name);
+                FsDir dayDir;
+                if (R_FAILED(fsFsOpenDirectory(albumDirectory, dayFolder, FsDirOpenMode_ReadFiles, &dayDir))) continue;
+
+                FsDirectoryEntry fileEntry;
+                s64 fileEntriesRead = 0;
+                while (R_SUCCEEDED(fsDirRead(&dayDir, &fileEntriesRead, 1, &fileEntry)) && fileEntriesRead > 0) {
+                    if (fileEntry.type != FsDirEntryType_File) continue;
+
+                    // Check for ".jpg" extension
+                    size_t len = strlen(fileEntry.name);
+                    if (len < 4 || strcmp(&fileEntry.name[len - 4], ".jpg") != 0) continue;
+
+                    // Parse timestamp from filename
+                    u64 timestamp = 0;
+                    for (int i = 0; i < 14 && isdigit((unsigned char)fileEntry.name[i]); ++i) {
+                        timestamp = timestamp * 10 + (fileEntry.name[i] - '0');
+                    }
+
+                    // Update if this file has a newer timestamp
+                    if (timestamp > latestTimestamp) {
+                        latestTimestamp = timestamp;
+                        snprintf(latestFilePath, FS_MAX_PATH, "%s/%s", dayFolder, fileEntry.name);
+                    }
+                }
+                fsDirClose(&dayDir);
+            }
+            fsDirClose(&monthDir);
+        }
+        fsDirClose(&yearDir);
+    }
+    fsDirClose(&rootDir);
+
+    // Delete the latest file if found
+    if (latestTimestamp != 0) {
+        fsFsDeleteFile(albumDirectory, latestFilePath);
+    }
+}
+
+#endif
+
 // Same as above, but safer and less memory hungry for a Switch sysmodule
 void captureScreenshot(FsFileSystem *filesystem, const char *filePath)
 {
@@ -205,6 +288,11 @@ cleanup:
     free(sourceRow);
     FSFILEClose(pngFile);
     capsscCloseRawScreenShotReadStream();
+
+    #if NO_JPG_DIRECTIVE
+    // Additional functionality to delete the newest .jpg file
+    deleteNewestJpg(filesystem);
+    #endif
 }
 
 #endif
