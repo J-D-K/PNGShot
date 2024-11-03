@@ -60,7 +60,7 @@ CFLAGS	+=	$(INCLUDE) -D__SWITCH__
 #	CFLAGS	+= -DEXPERIMENTAL
 #endif
 
-# For no jpg duplicates
+# For no jpg duplicates (optional)
 NO_JPG_DIRECTIVE := 1
 CFLAGS += -DNO_JPG_DIRECTIVE=$(NO_JPG_DIRECTIVE)
 
