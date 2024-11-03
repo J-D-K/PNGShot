@@ -163,13 +163,26 @@ cleanup:
 #else
 
 #if NO_JPG_DIRECTIVE
-// Function to find and delete the newest .jpg in the Album directory
-void deleteNewestJpg(FsFileSystem *albumDirectory)
-{
+// Function to find and delete the closest .jpg to the current system time in the Album directory
+void deleteClosestToCurrentTimeJpg(FsFileSystem *albumDirectory) {
     FsDir rootDir;
     FsDirectoryEntry rootEntry;
-    char latestFilePath[FS_MAX_PATH] = {0};
-    u64 latestTimestamp = 0;
+    char closestFilePath[FS_MAX_PATH] = {0};
+    u64 smallestTimeDelta = (u64)(-1);  // Initialize to max possible value
+    u64 currentTimeStamp = 0;
+
+    // Get current system time
+    time_t t = time(NULL);
+    struct tm *now = localtime(&t);
+    if (now != NULL) {
+        // Convert current system time to a comparable format (yyyymmddhhmmss)
+        currentTimeStamp = (now->tm_year + 1900) * 10000000000 +
+                           (now->tm_mon + 1) * 100000000 +
+                           now->tm_mday * 1000000 +
+                           now->tm_hour * 10000 +
+                           now->tm_min * 100 +
+                           now->tm_sec;
+    }
 
     // Open the Album directory
     if (R_FAILED(fsFsOpenDirectory(albumDirectory, "/", FsDirOpenMode_ReadDirs, &rootDir))) {
@@ -216,15 +229,20 @@ void deleteNewestJpg(FsFileSystem *albumDirectory)
                     if (len < 4 || strcmp(&fileEntry.name[len - 4], ".jpg") != 0) continue;
 
                     // Parse timestamp from filename
-                    u64 timestamp = 0;
+                    u64 fileTimestamp = 0;
                     for (int i = 0; i < 14 && isdigit((unsigned char)fileEntry.name[i]); ++i) {
-                        timestamp = timestamp * 10 + (fileEntry.name[i] - '0');
+                        fileTimestamp = fileTimestamp * 10 + (fileEntry.name[i] - '0');
                     }
 
-                    // Update if this file has a newer timestamp
-                    if (timestamp > latestTimestamp) {
-                        latestTimestamp = timestamp;
-                        snprintf(latestFilePath, FS_MAX_PATH, "%s/%s", dayFolder, fileEntry.name);
+                    // Calculate the time difference between this file and the current time
+                    u64 timeDelta = (fileTimestamp > currentTimeStamp) ? 
+                                    (fileTimestamp - currentTimeStamp) : 
+                                    (currentTimeStamp - fileTimestamp);
+
+                    // Update the closest file if this one is closer
+                    if (timeDelta < smallestTimeDelta) {
+                        smallestTimeDelta = timeDelta;
+                        snprintf(closestFilePath, FS_MAX_PATH, "%s/%s", dayFolder, fileEntry.name);
                     }
                 }
                 fsDirClose(&dayDir);
@@ -235,12 +253,11 @@ void deleteNewestJpg(FsFileSystem *albumDirectory)
     }
     fsDirClose(&rootDir);
 
-    // Delete the latest file if found
-    if (latestTimestamp != 0) {
-        fsFsDeleteFile(albumDirectory, latestFilePath);
+    // Delete the closest file if found
+    if (smallestTimeDelta != (u64)(-1)) {
+        fsFsDeleteFile(albumDirectory, closestFilePath);
     }
 }
-
 #endif
 
 // Same as above, but safer and less memory hungry for a Switch sysmodule
@@ -291,7 +308,7 @@ cleanup:
 
     #if NO_JPG_DIRECTIVE
     // Additional functionality to delete the newest .jpg file
-    deleteNewestJpg(filesystem);
+    deleteClosestToCurrentTimeJpg(filesystem);
     #endif
 }
 
