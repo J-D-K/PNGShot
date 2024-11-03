@@ -163,26 +163,12 @@ cleanup:
 #else
 
 #if NO_JPG_DIRECTIVE
-// Function to find and delete the closest .jpg to the current system time in the Album directory
-void deleteClosestToCurrentTimeJpg(FsFileSystem *albumDirectory) {
+// Function to delete the .jpg file closest to the specified reference timestamp in the Album directory
+void deleteClosestToCurrentTimeJpg(FsFileSystem *albumDirectory, u64 referenceTimestamp) {
     FsDir rootDir;
     FsDirectoryEntry rootEntry;
     char closestFilePath[FS_MAX_PATH] = {0};
     u64 smallestTimeDelta = (u64)(-1);  // Initialize to max possible value
-    u64 currentTimeStamp = 0;
-
-    // Get current system time
-    time_t t = time(NULL);
-    struct tm *now = localtime(&t);
-    if (now != NULL) {
-        // Convert current system time to a comparable format (yyyymmddhhmmss)
-        currentTimeStamp = (now->tm_year + 1900) * 10000000000 +
-                           (now->tm_mon + 1) * 100000000 +
-                           now->tm_mday * 1000000 +
-                           now->tm_hour * 10000 +
-                           now->tm_min * 100 +
-                           now->tm_sec;
-    }
 
     // Open the Album directory
     if (R_FAILED(fsFsOpenDirectory(albumDirectory, "/", FsDirOpenMode_ReadDirs, &rootDir))) {
@@ -190,7 +176,6 @@ void deleteClosestToCurrentTimeJpg(FsFileSystem *albumDirectory) {
     }
 
     s64 entriesRead = 0;
-    // Traverse the Album folder structure
     while (R_SUCCEEDED(fsDirRead(&rootDir, &entriesRead, 1, &rootEntry)) && entriesRead > 0) {
         if (rootEntry.type != FsDirEntryType_Dir) continue;
 
@@ -234,12 +219,12 @@ void deleteClosestToCurrentTimeJpg(FsFileSystem *albumDirectory) {
                         fileTimestamp = fileTimestamp * 10 + (fileEntry.name[i] - '0');
                     }
 
-                    // Calculate the time difference between this file and the current time
-                    u64 timeDelta = (fileTimestamp > currentTimeStamp) ? 
-                                    (fileTimestamp - currentTimeStamp) : 
-                                    (currentTimeStamp - fileTimestamp);
+                    // Calculate the time difference from the reference timestamp
+                    u64 timeDelta = (fileTimestamp > referenceTimestamp) ? 
+                                    (fileTimestamp - referenceTimestamp) : 
+                                    (referenceTimestamp - fileTimestamp);
 
-                    // Update the closest file if this one is closer
+                    // Update if this .jpg file is the closest to the reference timestamp
                     if (timeDelta < smallestTimeDelta) {
                         smallestTimeDelta = timeDelta;
                         snprintf(closestFilePath, FS_MAX_PATH, "%s/%s", dayFolder, fileEntry.name);
@@ -258,10 +243,45 @@ void deleteClosestToCurrentTimeJpg(FsFileSystem *albumDirectory) {
         fsFsDeleteFile(albumDirectory, closestFilePath);
     }
 }
+
 #endif
 
+// Function to create a timestamped filename and return the timestamp
+u64 generateTimestampedFilename(char *pathOut, int pathMaxLength, FsFileSystem *fs, const char *tempPath) {
+    FsTimeStampRaw timestamp;
+    u64 fileTimestamp = 0;  // Initialize to hold the timestamp
+
+    if (R_SUCCEEDED(fsFsGetFileTimeStampRaw(fs, tempPath, &timestamp))) {
+        time_t ts = timestamp.created;
+        struct tm t;
+
+        if (gmtime_r(&ts, &t)) {
+            // Generate timestamp in yyyymmddhhmmss format
+            fileTimestamp = (t.tm_year + 1900) * 10000000000ULL +
+                            (t.tm_mon + 1) * 100000000 +
+                            t.tm_mday * 1000000 +
+                            t.tm_hour * 10000 +
+                            t.tm_min * 100 +
+                            t.tm_sec;
+
+            // Use the timestamp to format the file path
+            snprintf(pathOut, pathMaxLength, "/PNGs/%d-%02d-%02d_%02d-%02d-%02d.png",
+                     t.tm_year + 1900,
+                     t.tm_mon + 1,
+                     t.tm_mday,
+                     t.tm_hour,
+                     t.tm_min,
+                     t.tm_sec);
+        }
+    }
+
+    return fileTimestamp;  // Return the timestamp
+}
+
+
+
 // Same as above, but safer and less memory hungry for a Switch sysmodule
-void captureScreenshot(FsFileSystem *filesystem, const char *filePath)
+void captureScreenshot(FsFileSystem *filesystem, const char *tempFilePath)
 {
     uint64_t captureSize = 0;
     uint64_t captureWidth = 0;
@@ -280,7 +300,7 @@ void captureScreenshot(FsFileSystem *filesystem, const char *filePath)
     sourceRow = malloc(SCREENSHOT_WIDTH * 4); // Single RGBA row buffer
     CLEANUP_AND_ABORT_IF(sourceRow == NULL);
 
-    pngFile = FSFILEOpen(filesystem, filePath);
+    pngFile = FSFILEOpen(filesystem, tempFilePath);  // Save to temporary path
     CLEANUP_AND_ABORT_IF(pngFile == NULL);
 
     pngInitIOAndWriteInfo(pngWritingStruct, pngInfoStruct, pngFile);
@@ -306,10 +326,15 @@ cleanup:
     FSFILEClose(pngFile);
     capsscCloseRawScreenShotReadStream();
 
+    // Rename file based on timestamp
+    char finalPath[FS_MAX_PATH];
+    u64 timestamp = generateTimestampedFilename(finalPath, FS_MAX_PATH, filesystem, tempFilePath);
+    fsFsRenameFile(filesystem, tempFilePath, finalPath);
+
     #if NO_JPG_DIRECTIVE
-    // Additional functionality to delete the newest .jpg file
-    deleteClosestToCurrentTimeJpg(filesystem);
+    deleteClosestToCurrentTimeJpg(filesystem, timestamp);
     #endif
+    
 }
 
 #endif
