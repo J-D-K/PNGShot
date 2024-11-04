@@ -134,8 +134,8 @@ int main(void)
     // Temporary file path for initial screenshot capture
     const char *tempFilePath = "/PNGs/tmp.png";
 
-    const u64 upperThresheld = 500000000;
-    const u64 lowerThresheld = 50000000;
+    const u64 upperThreshold = 500000000;
+    const u64 lowerThreshold = 50000000;
 
     // Loop forever, waiting for capture button event.
     while (true)
@@ -148,7 +148,7 @@ int main(void)
             // If the button was held for more than 500 ms, reset
             u64 elapsed_ns = armTicksToNs(armGetSystemTick() - start_tick);
             
-            if (elapsed_ns >= upperThresheld || !held) // More than 500 ms
+            if (elapsed_ns >= upperThreshold || !held) // More than 500 ms
             {
                 // If button was not already held, start holding
                 held = true;
@@ -159,7 +159,7 @@ int main(void)
                 // If button was already held and now released
                 //u64 elapsed_ns = armTicksToNs(armGetSystemTick() - start_tick);
     
-                if (elapsed_ns >= lowerThresheld && elapsed_ns < upperThresheld) // Between 50 ms and 500 ms
+                if (elapsed_ns >= lowerThreshold && elapsed_ns < upperThreshold) // Between 50 ms and 500 ms
                 {
                     // Valid quick press detected, proceed to capture screenshot
                     //char screenshotPath[FS_MAX_PATH];
