@@ -138,7 +138,7 @@ int main(void)
     while (true)
     {
         // Check for button press event
-        if (R_SUCCEEDED(eventWait(&captureButtonEvent, 3600000000000))) // increased to 1 hour (longer the better here)
+        if (R_SUCCEEDED(eventWait(&captureButtonEvent, UINT64_MAX))) // await indefinetly
         {
             eventClear(&captureButtonEvent);
     
