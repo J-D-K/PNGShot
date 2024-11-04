@@ -134,15 +134,21 @@ int main(void)
     // Temporary file path for initial screenshot capture
     const char *tempFilePath = "/PNGs/tmp.png";
 
+    const u64 upperThresheld = 500000000;
+    const u64 lowerThresheld = 50000000;
+
     // Loop forever, waiting for capture button event.
     while (true)
     {
         // Check for button press event
-        if (R_SUCCEEDED(eventWait(&captureButtonEvent, UINT64_MAX))) // await indefinetly
+        if (R_SUCCEEDED(eventWait(&captureButtonEvent, UINT64_MAX))) // increased to 1 hour (longer the better here)
         {
             eventClear(&captureButtonEvent);
-    
-            if (!held)
+
+            // If the button was held for more than 500 ms, reset
+            u64 elapsed_ns = armTicksToNs(armGetSystemTick() - start_tick);
+            
+            if (elapsed_ns >= upperThresheld || !held) // More than 500 ms
             {
                 // If button was not already held, start holding
                 held = true;
@@ -151,9 +157,9 @@ int main(void)
             else
             {
                 // If button was already held and now released
-                u64 elapsed_ns = armTicksToNs(armGetSystemTick() - start_tick);
+                //u64 elapsed_ns = armTicksToNs(armGetSystemTick() - start_tick);
     
-                if (elapsed_ns >= 50000000 && elapsed_ns < 500000000) // Between 50 ms and 500 ms
+                if (elapsed_ns >= lowerThresheld && elapsed_ns < upperThresheld) // Between 50 ms and 500 ms
                 {
                     // Valid quick press detected, proceed to capture screenshot
                     //char screenshotPath[FS_MAX_PATH];
@@ -169,18 +175,6 @@ int main(void)
                 start_tick = 0;
                 
             }
-        }
-        //else if (held)
-        //{
-        //    // If the button was held for more than 500 ms, reset
-        //    u64 elapsed_ns = armTicksToNs(armGetSystemTick() - start_tick);
-        //
-        //    if (elapsed_ns >= 500000000) // More than 500 ms
-        //    {
-        //        // Long press detected, ignore as a quick press
-        //        held = false;
-        //        start_tick = 0;
-        //    }
         }
     }
     
