@@ -170,17 +170,17 @@ int main(void)
                 
             }
         }
-        else if (held)
-        {
-            // If the button was held for more than 500 ms, reset
-            u64 elapsed_ns = armTicksToNs(armGetSystemTick() - start_tick);
-        
-            if (elapsed_ns >= 500000000) // More than 500 ms
-            {
-                // Long press detected, ignore as a quick press
-                held = false;
-                start_tick = 0;
-            }
+        //else if (held)
+        //{
+        //    // If the button was held for more than 500 ms, reset
+        //    u64 elapsed_ns = armTicksToNs(armGetSystemTick() - start_tick);
+        //
+        //    if (elapsed_ns >= 500000000) // More than 500 ms
+        //    {
+        //        // Long press detected, ignore as a quick press
+        //        held = false;
+        //        start_tick = 0;
+        //    }
         }
     }
     
