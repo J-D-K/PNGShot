@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <switch.h>
+#include <ctype.h>      // Include for tolower
 
 // This is used to jump to the cleanup label.
 #define CLEANUP_AND_ABORT_IF(x)                                                                                                                \
@@ -76,14 +77,14 @@ static inline void rgbaToRGB(restrict png_const_bytep streamCaptureBuffer, restr
     }
 }
 #else
-static inline void rgbaToRGB(restrict png_const_bytep sourceRow, restrict png_bytep destinationRow)
-{
-    for (size_t sourceOffset = 0, destinationOffset = 0; sourceOffset < SCREENSHOT_WIDTH * 4; sourceOffset += 4, destinationOffset += 3)
-    {
-        // Copy skipping alpha byte.
-        memcpy(&destinationRow[destinationOffset], &sourceRow[sourceOffset], 3);
-    }
-}
+//static inline void rgbaToRGB(restrict png_const_bytep sourceRow, restrict png_bytep destinationRow)
+//{
+//    for (size_t sourceOffset = 0, destinationOffset = 0; sourceOffset < SCREENSHOT_WIDTH * 4; sourceOffset += 4, destinationOffset += 3)
+//    {
+//        // Copy skipping alpha byte.
+//        memcpy(&destinationRow[destinationOffset], &sourceRow[sourceOffset], 3);
+//    }
+//}
 #endif
 
 // Which one gets used depends on flag sent to makefile
@@ -160,8 +161,127 @@ cleanup:
     FSFILEClose(pngFile);
 }
 #else
+
+#if NO_JPG_DIRECTIVE
+// Function to delete the .jpg file closest to the specified reference timestamp in the Album directory
+void deleteClosestToCurrentTimeJpg(FsFileSystem *albumDirectory, u64 referenceTimestamp) {
+    FsDir rootDir;
+    FsDirectoryEntry rootEntry;
+    char closestFilePath[FS_MAX_PATH] = {0};
+    u64 smallestTimeDelta = (u64)(-1);  // Initialize to max possible value
+
+    // Open the Album directory
+    if (R_FAILED(fsFsOpenDirectory(albumDirectory, "/", FsDirOpenMode_ReadDirs, &rootDir))) {
+        return;
+    }
+
+    s64 entriesRead = 0;
+    while (R_SUCCEEDED(fsDirRead(&rootDir, &entriesRead, 1, &rootEntry)) && entriesRead > 0) {
+        if (rootEntry.type != FsDirEntryType_Dir) continue;
+
+        char yearFolder[FS_MAX_PATH];
+        snprintf(yearFolder, FS_MAX_PATH, "/%s", rootEntry.name);
+        FsDir yearDir;
+        if (R_FAILED(fsFsOpenDirectory(albumDirectory, yearFolder, FsDirOpenMode_ReadDirs, &yearDir))) continue;
+
+        FsDirectoryEntry monthEntry;
+        s64 monthEntriesRead = 0;
+        while (R_SUCCEEDED(fsDirRead(&yearDir, &monthEntriesRead, 1, &monthEntry)) && monthEntriesRead > 0) {
+            if (monthEntry.type != FsDirEntryType_Dir) continue;
+
+            char monthFolder[FS_MAX_PATH];
+            snprintf(monthFolder, FS_MAX_PATH, "%s/%s", yearFolder, monthEntry.name);
+            FsDir monthDir;
+            if (R_FAILED(fsFsOpenDirectory(albumDirectory, monthFolder, FsDirOpenMode_ReadDirs, &monthDir))) continue;
+
+            FsDirectoryEntry dayEntry;
+            s64 dayEntriesRead = 0;
+            while (R_SUCCEEDED(fsDirRead(&monthDir, &dayEntriesRead, 1, &dayEntry)) && dayEntriesRead > 0) {
+                if (dayEntry.type != FsDirEntryType_Dir) continue;
+
+                char dayFolder[FS_MAX_PATH];
+                snprintf(dayFolder, FS_MAX_PATH, "%s/%s", monthFolder, dayEntry.name);
+                FsDir dayDir;
+                if (R_FAILED(fsFsOpenDirectory(albumDirectory, dayFolder, FsDirOpenMode_ReadFiles, &dayDir))) continue;
+
+                FsDirectoryEntry fileEntry;
+                s64 fileEntriesRead = 0;
+                while (R_SUCCEEDED(fsDirRead(&dayDir, &fileEntriesRead, 1, &fileEntry)) && fileEntriesRead > 0) {
+                    if (fileEntry.type != FsDirEntryType_File) continue;
+
+                    // Check for ".jpg" extension
+                    size_t len = strlen(fileEntry.name);
+                    if (len < 4 || strcmp(&fileEntry.name[len - 4], ".jpg") != 0) continue;
+
+                    // Parse timestamp from filename
+                    u64 fileTimestamp = 0;
+                    for (int i = 0; i < 14 && isdigit((unsigned char)fileEntry.name[i]); ++i) {
+                        fileTimestamp = fileTimestamp * 10 + (fileEntry.name[i] - '0');
+                    }
+
+                    // Calculate the time difference from the reference timestamp
+                    u64 timeDelta = (fileTimestamp > referenceTimestamp) ? 
+                                    (fileTimestamp - referenceTimestamp) : 
+                                    (referenceTimestamp - fileTimestamp);
+
+                    // Update if this .jpg file is the closest to the reference timestamp
+                    if (timeDelta < smallestTimeDelta) {
+                        smallestTimeDelta = timeDelta;
+                        snprintf(closestFilePath, FS_MAX_PATH, "%s/%s", dayFolder, fileEntry.name);
+                    }
+                }
+                fsDirClose(&dayDir);
+            }
+            fsDirClose(&monthDir);
+        }
+        fsDirClose(&yearDir);
+    }
+    fsDirClose(&rootDir);
+
+    // Delete the closest file if found
+    if (smallestTimeDelta != (u64)(-1)) {
+        fsFsDeleteFile(albumDirectory, closestFilePath);
+    }
+}
+
+#endif
+
+// Function to create a timestamped filename and return the timestamp
+u64 generateTimestampedFilename(char *pathOut, int pathMaxLength, FsFileSystem *fs, const char *tempPath) {
+    FsTimeStampRaw timestamp;
+    u64 fileTimestamp = 0;  // Initialize to hold the timestamp
+
+    if (R_SUCCEEDED(fsFsGetFileTimeStampRaw(fs, tempPath, &timestamp))) {
+        time_t ts = timestamp.created;
+        struct tm t;
+
+        if (gmtime_r(&ts, &t)) {
+            // Generate timestamp in yyyymmddhhmmss format
+            fileTimestamp = (t.tm_year + 1900) * 10000000000ULL +
+                            (t.tm_mon + 1) * 100000000 +
+                            t.tm_mday * 1000000 +
+                            t.tm_hour * 10000 +
+                            t.tm_min * 100 +
+                            t.tm_sec;
+
+            // Use the timestamp to format the file path
+            snprintf(pathOut, pathMaxLength, "/PNGs/%d-%02d-%02d_%02d-%02d-%02d.png",
+                     t.tm_year + 1900,
+                     t.tm_mon + 1,
+                     t.tm_mday,
+                     t.tm_hour,
+                     t.tm_min,
+                     t.tm_sec);
+        }
+    }
+
+    return fileTimestamp;  // Return the timestamp
+}
+
+
+
 // Same as above, but safer and less memory hungry for a Switch sysmodule
-void captureScreenshot(FsFileSystem *filesystem, const char *filePath)
+void captureScreenshot(FsFileSystem *filesystem, const char *tempFilePath)
 {
     uint64_t captureSize = 0;
     uint64_t captureWidth = 0;
@@ -169,7 +289,6 @@ void captureScreenshot(FsFileSystem *filesystem, const char *filePath)
     png_structp pngWritingStruct = NULL;
     png_infop pngInfoStruct = NULL;
     png_bytep sourceRow = NULL;
-    png_bytep destinationRow = NULL;
     FSFILE *pngFile = NULL;
 
     RETURN_ON_FAILURE(
@@ -178,31 +297,44 @@ void captureScreenshot(FsFileSystem *filesystem, const char *filePath)
     initLibPNGStructs(&pngWritingStruct, &pngInfoStruct);
     CLEANUP_AND_ABORT_IF(pngWritingStruct == NULL || pngInfoStruct == NULL);
 
-    sourceRow = malloc(SCREENSHOT_WIDTH * 4);
-    destinationRow = malloc(SCREENSHOT_WIDTH * 3);
-    CLEANUP_AND_ABORT_IF(sourceRow == NULL || destinationRow == NULL);
+    sourceRow = malloc(SCREENSHOT_WIDTH * 4); // Single RGBA row buffer
+    CLEANUP_AND_ABORT_IF(sourceRow == NULL);
 
-    pngFile = FSFILEOpen(filesystem, filePath);
+    pngFile = FSFILEOpen(filesystem, tempFilePath);  // Save to temporary path
     CLEANUP_AND_ABORT_IF(pngFile == NULL);
 
-    // Start writing png
     pngInitIOAndWriteInfo(pngWritingStruct, pngInfoStruct, pngFile);
-    // Loop through row by row
+
+    // Set libpng to ignore the alpha channel in the RGBA data
+    png_set_filler(pngWritingStruct, 0, PNG_FILLER_AFTER);
+
     for (size_t i = 0; i < SCREENSHOT_HEIGHT; i++)
     {
         uint64_t bytesRead = 0;
         CLEANUP_AND_ABORT_ON_FAILURE(
             capsscReadRawScreenShotReadStream(&bytesRead, sourceRow, SCREENSHOT_WIDTH * 4, i * (SCREENSHOT_WIDTH * 4)));
-        rgbaToRGB(sourceRow, destinationRow);
-        png_write_row(pngWritingStruct, destinationRow);
+
+        // Write the RGBA row with libpng stripping the alpha channel
+        png_write_row(pngWritingStruct, sourceRow);
     }
+
 cleanup:
     png_write_end(pngWritingStruct, pngInfoStruct);
     png_free_data(pngWritingStruct, pngInfoStruct, PNG_FREE_ALL, -1);
     png_destroy_write_struct(&pngWritingStruct, &pngInfoStruct);
     free(sourceRow);
-    free(destinationRow);
     FSFILEClose(pngFile);
     capsscCloseRawScreenShotReadStream();
+
+    // Rename file based on timestamp
+    char finalPath[FS_MAX_PATH];
+    u64 timestamp = generateTimestampedFilename(finalPath, FS_MAX_PATH, filesystem, tempFilePath);
+    fsFsRenameFile(filesystem, tempFilePath, finalPath);
+
+    #if NO_JPG_DIRECTIVE
+    deleteClosestToCurrentTimeJpg(filesystem, timestamp);
+    #endif
+    
 }
+
 #endif

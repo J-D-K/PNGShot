@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <switch.h>
 #include <sys/stat.h>
-#include <time.h>
+//#include <time.h>
 
 // Macro to fail with. Not the right error code but whatever.
 #define ABORT_ON_FAILURE(x)                                                                                                                    \
@@ -21,7 +21,7 @@ uint32_t __nx_fs_num_sessions = 1;
 #endif
 
 // This is so we can properly call this function from libnx after the time service is Initialized.
-extern void __libnx_init_time(void);
+//extern void __libnx_init_time(void);
 
 // Initializes heap
 void __libnx_initheap(void)
@@ -51,18 +51,18 @@ static inline void initLibnxFirmwareVersion(void)
     }
 }
 
-static inline void initLibnxTime(void)
-{
-    ABORT_ON_FAILURE(timeInitialize());
-    __libnx_init_time();
-    timeExit();
-}
+//static inline void initLibnxTime(void)
+//{
+//    ABORT_ON_FAILURE(timeInitialize());
+//    __libnx_init_time();
+//    timeExit();
+//}
 
 void __appInit(void)
 {
     ABORT_ON_FAILURE(smInitialize());
     initLibnxFirmwareVersion();
-    initLibnxTime();
+    //initLibnxTime();
     ABORT_ON_FAILURE(hidsysInitialize());
     ABORT_ON_FAILURE(fsInitialize());
     ABORT_ON_FAILURE(capsscInitialize());
@@ -107,13 +107,13 @@ static inline Result createPNGShotDirectory(FsFileSystem *filesystem)
 }
 
 // This writes the name of the screenshot to ScreeShotNameBuffer.
-static inline void generateScreenShotName(char *pathOut, int pathMaxLength)
-{
-    // Grab local time.
-    time_t timer;
-    time(&timer);
-    strftime(pathOut, pathMaxLength, "/PNGs/%Y%m%d%H%M%S.png", localtime(&timer));
-}
+//static inline void generateScreenShotName(char *pathOut, int pathMaxLength)
+//{
+//    // Grab local time.
+//    time_t timer;
+//    time(&timer);
+//    strftime(pathOut, pathMaxLength, "/PNGs/%Y-%m-%d_%H-%M-%S.png", localtime(&timer));
+//}
 
 int main(void)
 {
@@ -131,15 +131,24 @@ int main(void)
     bool held = false;            // Track if the button is held
     u64 start_tick = 0;           // Time when the button press started
 
+    // Temporary file path for initial screenshot capture
+    const char *tempFilePath = "/PNGs/tmp.png";
+
+    const u64 upperThreshold = 500000000;
+    const u64 lowerThreshold = 50000000;
+
     // Loop forever, waiting for capture button event.
     while (true)
     {
         // Check for button press event
-        if (R_SUCCEEDED(eventWait(&captureButtonEvent, 17000000))) // Wait for a short time to capture quick presses
+        if (R_SUCCEEDED(eventWait(&captureButtonEvent, UINT64_MAX))) // await indefinetly
         {
             eventClear(&captureButtonEvent);
-    
-            if (!held)
+
+            // If the button was held for more than 500 ms, reset
+            u64 elapsed_ns = armTicksToNs(armGetSystemTick() - start_tick);
+            
+            if (elapsed_ns >= upperThreshold || !held) // More than 500 ms
             {
                 // If button was not already held, start holding
                 held = true;
@@ -148,31 +157,23 @@ int main(void)
             else
             {
                 // If button was already held and now released
-                u64 elapsed_ns = armTicksToNs(armGetSystemTick() - start_tick);
+                //u64 elapsed_ns = armTicksToNs(armGetSystemTick() - start_tick);
     
-                if (elapsed_ns >= 50000000 && elapsed_ns < 500000000) // Between 50 ms and 500 ms
+                if (elapsed_ns >= lowerThreshold && elapsed_ns < upperThreshold) // Between 50 ms and 500 ms
                 {
                     // Valid quick press detected, proceed to capture screenshot
-                    char screenshotPath[FS_MAX_PATH];
-                    generateScreenShotName(screenshotPath, FS_MAX_PATH);
-                    captureScreenshot(&albumDirectory, screenshotPath);
+                    //char screenshotPath[FS_MAX_PATH];
+                    //generateScreenShotName(screenshotPath, FS_MAX_PATH);
+                    //captureScreenshot(&albumDirectory, screenshotPath);
+
+                    // Valid quick press detected, proceed to capture screenshot to temp path
+                    captureScreenshot(&albumDirectory, tempFilePath);
                 }
     
                 // Reset the state
                 held = false;
                 start_tick = 0;
-            }
-        }
-        else if (held)
-        {
-            // If the button was held for more than 500 ms, reset
-            u64 elapsed_ns = armTicksToNs(armGetSystemTick() - start_tick);
-    
-            if (elapsed_ns > 500000000) // More than 500 ms
-            {
-                // Long press detected, ignore as a quick press
-                held = false;
-                start_tick = 0;
+                
             }
         }
     }
