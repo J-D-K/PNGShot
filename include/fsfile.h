@@ -9,6 +9,8 @@ typedef struct
 } FSFILE;
 
 // This stuff is named like this to avoid conflicts with libnx.
+// Returns if file could be opened for reading. This is just to ping to see if the no_jpeg file exists.
+bool FSFILEExists(FsFileSystem *filesystem, const char *filePath);
 // Opens file for writing. Returns NULL on failure.
 FSFILE *FSFILEOpen(FsFileSystem *filesystem, const char *filePath);
 // Writes buffer to file. Returns 0 on failure.

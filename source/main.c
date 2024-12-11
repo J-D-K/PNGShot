@@ -1,8 +1,8 @@
 #include "capture.h"
+#include "fsfile.h"
 #include <stdio.h>
 #include <switch.h>
 #include <sys/stat.h>
-//#include <time.h>
 
 // Macro to fail with. Not the right error code but whatever.
 #define ABORT_ON_FAILURE(x)                                                                                                                    \
@@ -102,6 +102,12 @@ int main(void)
     FsFileSystem albumDirectory;
     ABORT_ON_FAILURE(openAlbumDirectory(&albumDirectory));
     ABORT_ON_FAILURE(createPNGShotDirectory(&albumDirectory));
+
+    // Detect the file so PNGShot deletes pngs
+    if (FSFILEExists(&albumDirectory, "/PNGs/allow_jpeg"))
+    {
+        g_NoJpeg = false;
+    }
 
     bool held = false;  // Track if the button is held
     u64 start_tick = 0; // Time when the button press started

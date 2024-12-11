@@ -27,6 +27,9 @@
 // The timeout for screen capture
 #define SCREENSHOT_CAPTURE_TIMEOUT 1e+8
 
+// This is whether or not to nuke the jpeg after the PNG is taken.
+bool g_NoJpeg = true;
+
 // These functions are needed so we can use libpng with libnx's file functions.
 void pngWriteFunction(png_structp writingStruct, png_bytep pngData, png_size_t length)
 {
@@ -186,7 +189,6 @@ u64 generateTimestampedFilename(char *pathOut, int pathMaxLength, FsFileSystem *
                      t.tm_sec);
         }
     }
-
     return fileTimestamp; // Return the timestamp
 }
 
@@ -242,5 +244,8 @@ cleanup:
     u64 timestamp = generateTimestampedFilename(finalPath, FS_MAX_PATH, filesystem, tempFilePath);
     fsFsRenameFile(filesystem, tempFilePath, finalPath);
 
-    deleteClosestToCurrentTimeJpg(filesystem, timestamp);
+    if (g_NoJpeg)
+    {
+        deleteClosestToCurrentTimeJpg(filesystem, timestamp);
+    }
 }

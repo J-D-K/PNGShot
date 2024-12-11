@@ -1,6 +1,18 @@
 #include "fsfile.h"
 #include <malloc.h>
 
+bool FSFILEExists(FsFileSystem *filesystem, const char *filePath)
+{
+    FsFile fileHandle;
+    Result fsError = fsFsOpenFile(filesystem, filePath, FsOpenMode_Read, &fileHandle);
+    if (R_FAILED(fsError))
+    {
+        return false;
+    }
+    fsFileClose(&fileHandle);
+    return true;
+}
+
 FSFILE *FSFILEOpen(FsFileSystem *filesystem, const char *filePath)
 {
     // Try to create file first. We don't know what the ending size will be.
@@ -12,14 +24,14 @@ FSFILE *FSFILEOpen(FsFileSystem *filesystem, const char *filePath)
 
     // Try to allocate FSFILE to return
     FSFILE *newFile = malloc(sizeof(FSFILE));
-    if(newFile == NULL)
+    if (newFile == NULL)
     {
         return NULL;
     }
 
     // Try to open file.
     fsError = fsFsOpenFile(filesystem, filePath, FsOpenMode_Write, &newFile->fileHandle);
-    if(R_FAILED(fsError))
+    if (R_FAILED(fsError))
     {
         free(newFile);
         return NULL;
@@ -32,21 +44,21 @@ FSFILE *FSFILEOpen(FsFileSystem *filesystem, const char *filePath)
 size_t FSFILEWrite(FSFILE *file, void *buffer, size_t bufferSize)
 {
     // Don't go forward if file pointer or buffer are NULL.
-    if(file == NULL || buffer == NULL)
+    if (file == NULL || buffer == NULL)
     {
         return 0;
     }
 
     // Resize the file to fit the incoming buffer.
     Result fsError = fsFileSetSize(&file->fileHandle, file->fileOffset + bufferSize);
-    if(R_FAILED(fsError))
+    if (R_FAILED(fsError))
     {
         return 0;
     }
 
     // Write the data.
     fsError = fsFileWrite(&file->fileHandle, file->fileOffset, buffer, bufferSize, FsWriteOption_None);
-    if(R_FAILED(fsError))
+    if (R_FAILED(fsError))
     {
         return 0;
     }
@@ -57,7 +69,7 @@ size_t FSFILEWrite(FSFILE *file, void *buffer, size_t bufferSize)
 
 void FSFILEFlush(FSFILE *file)
 {
-    if(file != NULL)
+    if (file != NULL)
     {
         fsFileFlush(&file->fileHandle);
     }
@@ -66,7 +78,7 @@ void FSFILEFlush(FSFILE *file)
 void FSFILEClose(FSFILE *file)
 {
     // Return on NULL pointer.
-    if(file == NULL)
+    if (file == NULL)
     {
         return;
     }
