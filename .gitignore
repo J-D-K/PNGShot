@@ -1,5 +1,10 @@
 .vscode/
 build/
+*.lst
 .clang-format
 .clang-tidy
 .editorconfig
+dist
+PatchGen
+*.zip
+hactool

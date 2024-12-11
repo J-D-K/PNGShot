@@ -50,31 +50,16 @@ DIST		:=	dist
 #---------------------------------------------------------------------------------
 ARCH	:=	-march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE
 
-CFLAGS	:=	-g -Wall -Os -ffunction-sections -fdata-sections -flto -fomit-frame-pointer -finline-small-functions\
-			$(ARCH) $(DEFINES)
+CFLAGS	:=	-g -Wall -Os -ffunction-sections -fdata-sections -flto -fomit-frame-pointer \
+			-finline-small-functions $(ARCH) $(DEFINES)
 
 CFLAGS	+=	$(INCLUDE) -D__SWITCH__
-
-# If the makefile is run with EXPERIMENTAL=true
-#ifeq (${EXPERIMENTAL}, true)
-#	CFLAGS	+= -DEXPERIMENTAL
-#endif
-
-# For no jpg duplicates (optional)
-NO_JPG_DIRECTIVE := 1
-CFLAGS += -DNO_JPG_DIRECTIVE=$(NO_JPG_DIRECTIVE)
-
-
-CXXFLAGS	:= $(CFLAGS) -fno-rtti -fno-exceptions  -fno-unwind-tables -fno-asynchronous-unwind-tables
+CXXFLAGS	:= $(CFLAGS) -fno-rtti -fno-exceptions  -fno-unwind-tables -fno-asynchronous-unwind-tables \
+			   -flto -fuse-linker-plugin -flto=6
 
 ASFLAGS	:=	-g $(ARCH)
-LDFLAGS	=	-specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
-LDFLAGS += -Wl,--as-needed
-
-
-# For Ensuring Parallel LTRANS Jobs w/ GCC, make -j6
-CXXFLAGS += -flto -fuse-linker-plugin -flto=6
-LDFLAGS += -flto=6
+LDFLAGS	=	-specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map) \
+			-Wl,--as-needed -flto=6
 
 LIBS	:= -lnx -lpng -lz
 
@@ -176,15 +161,16 @@ endif
 
 #---------------------------------------------------------------------------------
 all: $(BUILD)
-#	@mv ${TARGET}.nsp exefs.nsp
-#	@mkdir -p ${DIST}/atmosphere/exefs_patches/vi_patches
-#	@cp patches/* ${DIST}/atmosphere/exefs_patches/vi_patches/
+	@mkdir -p exefs_patches
+	@mkdir -p ${DIST}/atmosphere/exefs_patches
+	@cp -r PatchGen/exefs_patches/* exefs_patches
+	@cp -r exefs_patches/* ${DIST}/atmosphere/exefs_patches
 	@mkdir -p ${DIST}/atmosphere/contents/010000000000C236/flags
 	@touch ${DIST}/atmosphere/contents/010000000000C236/flags/boot2.flag
 	@cp toolbox.json ${DIST}/atmosphere/contents/010000000000C236/toolbox.json
 	@cp ${TARGET}.nsp ${DIST}/atmosphere/contents/010000000000C236/exefs.nsp
 	@cd ${DIST}; zip -q -r ${TARGET}.zip ./*; cd ../;
-	@hactool --disablekeywarns -t nso ${TARGET}.nso
+#	@./hactool --disablekeywarns -t nso ${TARGET}.nso
 
 
 $(BUILD):

@@ -13,15 +13,7 @@
 uint32_t __nx_applet_type = AppletType_None;
 uint32_t __nx_fs_num_sessions = 1;
 
-// Experimental build buffers the entire screenshot stream and needs more memory to work with.
-#ifdef EXPERIMENTAL
-#define INNER_HEAP_SIZE 0x687000
-#else
 #define INNER_HEAP_SIZE 0x60000
-#endif
-
-// This is so we can properly call this function from libnx after the time service is Initialized.
-//extern void __libnx_init_time(void);
 
 // Initializes heap
 void __libnx_initheap(void)
@@ -51,18 +43,10 @@ static inline void initLibnxFirmwareVersion(void)
     }
 }
 
-//static inline void initLibnxTime(void)
-//{
-//    ABORT_ON_FAILURE(timeInitialize());
-//    __libnx_init_time();
-//    timeExit();
-//}
-
 void __appInit(void)
 {
     ABORT_ON_FAILURE(smInitialize());
     initLibnxFirmwareVersion();
-    //initLibnxTime();
     ABORT_ON_FAILURE(hidsysInitialize());
     ABORT_ON_FAILURE(fsInitialize());
     ABORT_ON_FAILURE(capsscInitialize());
@@ -83,7 +67,7 @@ static inline Result openAlbumDirectory(FsFileSystem *filesystem)
 {
     // Try to open SD album first. If it fails, fall back to NAND.
     Result fsError = fsOpenImageDirectoryFileSystem(filesystem, FsImageDirectoryId_Sd);
-    if(R_FAILED(fsError))
+    if (R_FAILED(fsError))
     {
         fsError = fsOpenImageDirectoryFileSystem(filesystem, FsImageDirectoryId_Nand);
     }
@@ -96,7 +80,7 @@ static inline Result createPNGShotDirectory(FsFileSystem *filesystem)
     // Check if it exists first.
     FsDir directoryHandle;
     Result fsError = fsFsOpenDirectory(filesystem, "/PNGs", FsDirOpenMode_ReadDirs | FsDirOpenMode_ReadFiles, &directoryHandle);
-    if(R_FAILED(fsError))
+    if (R_FAILED(fsError))
     {
         // If it failed, assume it doesn't exist and try to create it.
         fsError = fsFsCreateDirectory(filesystem, "/PNGs");
@@ -105,15 +89,6 @@ static inline Result createPNGShotDirectory(FsFileSystem *filesystem)
     fsDirClose(&directoryHandle);
     return fsError;
 }
-
-// This writes the name of the screenshot to ScreeShotNameBuffer.
-//static inline void generateScreenShotName(char *pathOut, int pathMaxLength)
-//{
-//    // Grab local time.
-//    time_t timer;
-//    time(&timer);
-//    strftime(pathOut, pathMaxLength, "/PNGs/%Y-%m-%d_%H-%M-%S.png", localtime(&timer));
-//}
 
 int main(void)
 {
@@ -128,8 +103,8 @@ int main(void)
     ABORT_ON_FAILURE(openAlbumDirectory(&albumDirectory));
     ABORT_ON_FAILURE(createPNGShotDirectory(&albumDirectory));
 
-    bool held = false;            // Track if the button is held
-    u64 start_tick = 0;           // Time when the button press started
+    bool held = false;  // Track if the button is held
+    u64 start_tick = 0; // Time when the button press started
 
     // Temporary file path for initial screenshot capture
     const char *tempFilePath = "/PNGs/tmp.png";
@@ -141,13 +116,13 @@ int main(void)
     while (true)
     {
         // Check for button press event
-        if (R_SUCCEEDED(eventWait(&captureButtonEvent, UINT64_MAX))) // await indefinetly
+        if (R_SUCCEEDED(eventWait(&captureButtonEvent, UINT64_MAX))) // await indefinitely
         {
             eventClear(&captureButtonEvent);
 
             // If the button was held for more than 500 ms, reset
             u64 elapsed_ns = armTicksToNs(armGetSystemTick() - start_tick);
-            
+
             if (elapsed_ns >= upperThreshold || !held) // More than 500 ms
             {
                 // If button was not already held, start holding
@@ -157,28 +132,17 @@ int main(void)
             else
             {
                 // If button was already held and now released
-                //u64 elapsed_ns = armTicksToNs(armGetSystemTick() - start_tick);
-    
                 if (elapsed_ns >= lowerThreshold && elapsed_ns < upperThreshold) // Between 50 ms and 500 ms
                 {
-                    // Valid quick press detected, proceed to capture screenshot
-                    //char screenshotPath[FS_MAX_PATH];
-                    //generateScreenShotName(screenshotPath, FS_MAX_PATH);
-                    //captureScreenshot(&albumDirectory, screenshotPath);
-
                     // Valid quick press detected, proceed to capture screenshot to temp path
                     captureScreenshot(&albumDirectory, tempFilePath);
                 }
-    
                 // Reset the state
                 held = false;
                 start_tick = 0;
-                
             }
         }
     }
-    
-    return 0;
-    
-}
 
+    return 0;
+}
