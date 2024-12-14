@@ -24,7 +24,7 @@ FSFILE *FSFILEOpen(FsFileSystem *filesystem, const char *filePath)
 
     // Try to allocate FSFILE to return
     FSFILE *newFile = malloc(sizeof(FSFILE));
-    if (newFile == NULL)
+    if (!newFile)
     {
         return NULL;
     }
@@ -44,7 +44,7 @@ FSFILE *FSFILEOpen(FsFileSystem *filesystem, const char *filePath)
 size_t FSFILEWrite(FSFILE *file, void *buffer, size_t bufferSize)
 {
     // Don't go forward if file pointer or buffer are NULL.
-    if (file == NULL || buffer == NULL)
+    if (!file || !buffer)
     {
         return 0;
     }
@@ -78,7 +78,7 @@ void FSFILEFlush(FSFILE *file)
 void FSFILEClose(FSFILE *file)
 {
     // Return on NULL pointer.
-    if (file == NULL)
+    if (!file)
     {
         return;
     }

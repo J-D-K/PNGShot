@@ -110,10 +110,7 @@ int main(void)
     }
 
     bool held = false;  // Track if the button is held
-    u64 start_tick = 0; // Time when the button press started
-
-    // Temporary file path for initial screenshot capture
-    const char *tempFilePath = "/PNGs/tmp.png";
+    u64 start_tick = 0; // Time when the button press started/
 
     const u64 upperThreshold = 500000000;
     const u64 lowerThreshold = 50000000;
@@ -141,7 +138,7 @@ int main(void)
                 if (elapsed_ns >= lowerThreshold && elapsed_ns < upperThreshold) // Between 50 ms and 500 ms
                 {
                     // Valid quick press detected, proceed to capture screenshot to temp path
-                    captureScreenshot(&albumDirectory, tempFilePath);
+                    captureScreenshot(&albumDirectory);
                 }
                 // Reset the state
                 held = false;
