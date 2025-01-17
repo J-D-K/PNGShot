@@ -63,7 +63,7 @@ void __appExit(void)
 }
 
 // This tries to open the album directory first on SD, if that fails, NAND.
-static inline Result openAlbumDirectory(FsFileSystem *filesystem)
+static Result openAlbumDirectory(FsFileSystem *filesystem)
 {
     // Try to open SD album first. If it fails, fall back to NAND.
     Result fsError = fsOpenImageDirectoryFileSystem(filesystem, FsImageDirectoryId_Sd);
@@ -75,7 +75,7 @@ static inline Result openAlbumDirectory(FsFileSystem *filesystem)
 }
 
 // This checks for and creates the PNGShot directory if it doesn't exist.
-static inline Result createPNGShotDirectory(FsFileSystem *filesystem)
+static Result createPNGShotDirectory(FsFileSystem *filesystem)
 {
     // Check if it exists first.
     FsDir directoryHandle;
@@ -90,6 +90,26 @@ static inline Result createPNGShotDirectory(FsFileSystem *filesystem)
     return fsError;
 }
 
+// Opens the sd card quickly to check if PNGShot should allow jpegs to be captured.
+static void checkForJpeg(void)
+{
+    FsFileSystem sdmc;
+    // Do not call this directly lol.
+    Result fsError = fsOpenSdCardFileSystem(&sdmc);
+    if (R_FAILED(fsError))
+    {
+        return;
+    }
+
+    if (FSFILEExists(&sdmc, "/config/PNGShot/allow_jpegs"))
+    {
+        g_noJpeg = false;
+    }
+    // Close sdmc
+    fsFsClose(&sdmc);
+}
+
+
 int main(void)
 {
     // Get event handle for capture button
@@ -98,16 +118,13 @@ int main(void)
     ABORT_ON_FAILURE(hidsysAcquireCaptureButtonEventHandle(&captureButtonEvent, false));
     eventClear(&captureButtonEvent);
 
+    // Detects if sdmc:/config/PNGShot/allow_jpegs exists and sets the global bool
+    checkForJpeg();
+
     // Open album directory and make sure folder exists.
     FsFileSystem albumDirectory;
     ABORT_ON_FAILURE(openAlbumDirectory(&albumDirectory));
     ABORT_ON_FAILURE(createPNGShotDirectory(&albumDirectory));
-
-    // Detect the file so PNGShot deletes pngs
-    if (FSFILEExists(&albumDirectory, "/PNGs/allow_jpeg"))
-    {
-        g_NoJpeg = false;
-    }
 
     bool held = false;  // Track if the button is held
     u64 start_tick = 0; // Time when the button press started/

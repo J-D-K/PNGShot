@@ -163,8 +163,8 @@ endif
 all: $(BUILD)
 	@mkdir -p exefs_patches
 	@mkdir -p ${DIST}/atmosphere/exefs_patches
-	@cp -r PatchGen/exefs_patches/* exefs_patches
-	@cp -r exefs_patches/* ${DIST}/atmosphere/exefs_patches
+#	@cp -r PatchGen/exefs_patches/* exefs_patches
+#	@cp -r exefs_patches/* ${DIST}/atmosphere/exefs_patches
 	@mkdir -p ${DIST}/atmosphere/contents/010000000000C236/flags
 	@touch ${DIST}/atmosphere/contents/010000000000C236/flags/boot2.flag
 	@cp toolbox.json ${DIST}/atmosphere/contents/010000000000C236/toolbox.json

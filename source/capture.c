@@ -14,13 +14,16 @@
     goto cleanup
 
 // This is whether or not to nuke the jpeg after the PNG is taken.
-bool g_NoJpeg = true;
+bool g_noJpeg = true;
+
 // Just in case this stuff changes.
 static const int SCREENSHOT_WIDTH = 1280;
 static const int SCREENSHOT_HEIGHT = 720;
 static const int SCREENSHOT_BIT_DEPTH = 8;
+
 // Temp file name for screen shots.
 static const char *TEMPORARY_FILE_NAME = "/PNGs/temp.png";
+
 // The timeout for screen capture
 static const int64_t SCREENSHOT_CAPTURE_TIMEOUT = 1e+8;
 
@@ -35,7 +38,8 @@ void pngFlushFunction(png_structp writingStruct)
     FSFILEFlush((FSFILE *)png_get_io_ptr(writingStruct));
 }
 
-inline static void rgbaStripAlpha(restrict png_bytep rgbaData)
+// For some reason, doing this results in smaller png files than using png_set_filler, so I'm sticking with it.
+static inline void rgbaStripAlpha(restrict png_bytep rgbaData)
 {
     // This should be able to use the same buffer and do both.
     for (int i = 0, j = 0; i < SCREENSHOT_WIDTH * 4; i += 4, j += 3)
@@ -192,7 +196,7 @@ cleanup:
     // Rename it and hope it works.
     fsFsRenameFile(filesystem, TEMPORARY_FILE_NAME, finalPath);
 
-    if (g_NoJpeg)
+    if (g_noJpeg)
     {
         deleteJPEGCapture(filesystem, timestamp.created);
     }
