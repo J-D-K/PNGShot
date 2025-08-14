@@ -8,104 +8,110 @@ import ips
 import sys
 from pathlib import Path
 
-parser = argparse.ArgumentParser()
-parser.add_argument("-i", "--input", dest="str_firmwareFolder", metavar="FOLDERPATH", help="Path to firmware files.", default="registered")
-parser.add_argument("-o", "--output", dest="str_patchesFolder", metavar="FOLDERPATH",
-                    help="Path to output IPS patches to.", default="VI_Patches")
+ARG_PARSER = argparse.ArgumentParser()
+ARG_PARSER.add_argument("-i", "--input", dest="firmwareFolder", metavar="FOLDERPATH", help="Path to firmware files.", default="registered")
+ARG_PARSER.add_argument("-o", "--output", dest="patchesFolder", metavar="FOLDERPATH",
+                    help="Path to output IPS patches to.", default="vi_patches")
 
-args_arguments = parser.parse_args()
+# Command line arguments.
+ARGUMENTS = ARG_PARSER.parse_args()
 
 # Module we're looking for.
-str_moduleName = "vi"
+MODULE_NAME: str = "vi"
 
 # String of hex values to search for in the file.
-str_searchSequence = "00 04 40 39 C0 03 5F D6"
+SEARCH_SEQUENCE: str = "00 04 40 39 C0 03 5F D6"
 
 # This is what replaces the string above
-str_newHex = "20 00 80 52"
+NEW_HEX: str = "20 00 80 52"
 
 # This is stripped from the title of the IPS
-str_stripFromIPS = "000000000000000000000000"
+STRIP_FROM_IPS: str = "000000000000000000000000"
 
 
-def find_in_text(text, find) -> str:
-    for i in text.split("\\r\\n"): # Note: Line endings need to be changed according to OS! Windows = \r\n, Linux = \n
+def find_in_text(text: str, find: str) -> str:
+    lineEndings: str
+    if os.name == "nt":
+        lineEndings = "\\r\\n";
+    else:
+        lineEndings = "\\n"
+
+    for i in text.split(lineEndings):
         if find in i:
             return i.split(":")[1].strip()
 
 
 def main():
-    if not os.path.exists(args_arguments.str_firmwareFolder):
+    if not os.path.exists(ARGUMENTS.firmwareFolder):
         print("Error: firmware folder doesn't exist.")
         return -1
 
     # Ensure output folder exists.
-    if not os.path.exists(args_arguments.str_patchesFolder):
-        os.makedirs(args_arguments.str_patchesFolder)
+    if not os.path.exists(ARGUMENTS.patchesFolder):
+        os.makedirs(ARGUMENTS.patchesFolder)
 
-    print(f"Input firmware folder: {args_arguments.str_firmwareFolder}")
-    print(f"IPS Patches folder: {args_arguments.str_patchesFolder}")
+    print(f"Input firmware folder: {ARGUMENTS.firmwareFolder}")
+    print(f"IPS Patches folder: {ARGUMENTS.patchesFolder}")
 
-    int_fileCount = 0
+    fileCount: int = 0
+    for currentFile in os.listdir(ARGUMENTS.firmwareFolder):
 
-    for currentFile in os.listdir(args_arguments.str_firmwareFolder):
+        filePath: str = os.fsdecode(os.path.join(
+            ARGUMENTS.firmwareFolder, currentFile))
 
-        str_filePath = os.fsdecode(os.path.join(
-            args_arguments.str_firmwareFolder, currentFile))
-
-        if not os.path.isfile(str_filePath):
+        if not os.path.isfile(filePath):
             continue
 
-        str_fileExtension = os.path.splitext(str_filePath)[1]
-        if str_fileExtension.lower() != ".nca":
+        fileExtension: str = os.path.splitext(filePath)[1]
+        if fileExtension.lower() != ".nca":
             continue
 
-        int_fileCount += 1
-        print(f"Processing {int_fileCount} : {str_filePath}", end="\r")
+        fileCount += 1
+        print(f"Processing {fileCount} : {filePath}", end="\r")
 
-        str_title = find_in_text(str(subprocess.check_output(["./hactool", "--disablekeywarns", "-i", f"{str_filePath}"])), "Title Name:")
-        if not str_title == str_moduleName:
+        title: str = find_in_text(str(subprocess.check_output(["./hactool", "--disablekeywarns", "-i", f"{filePath}"])), "Title Name:")
+        if not title == MODULE_NAME:
             continue
 
-        print(f"NCA found: {str_filePath}. Processing...")
+        print(f"NCA found: {filePath}. Processing...")
 
-        str_tempFolder = os.fsdecode(str_filePath + "_out")
-        str_main = os.fsdecode(os.path.join(str_tempFolder, "main"))
-        str_uncompressedMain = os.fsdecode(os.path.join(str_tempFolder, "main_uncompressed"))
+        tempFolder: str = os.fsdecode(filePath + "_out")
+        main: str = os.fsdecode(os.path.join(tempFolder, "main"))
+        uncompressedMain: str = os.fsdecode(os.path.join(tempFolder, "main_uncompressed"))
 
         subprocess.call(["./hactool", "--disablekeywarns", "-t", "nca",
-                        "--exefsdir", f"{str_tempFolder}", f"{str_filePath}"])
-        str_output = str(subprocess.check_output(["./hactool", "--disablekeywarns",
-                                                  f"--uncompressed={str_uncompressedMain}", "-t", "nso0", f"{str_main}"]))
+                        "--exefsdir", f"{tempFolder}", f"{filePath}"])
+        output: str = str(subprocess.check_output(["./hactool", "--disablekeywarns",
+                                                  f"--uncompressed={uncompressedMain}", "-t", "nso0", f"{main}"]))
 
-        str_buildID = find_in_text(str_output, "Build Id: ")
-        print(f"Title name: {str_title}")
-        print(f"Build ID {str_buildID}")
+        buildID: str = find_in_text(output, "Build Id: ")
+        print(f"Title name: {title}")
+        print(f"Build ID {buildID}")
 
-        bin_sequence = bytes.fromhex(str_searchSequence)
-        with open(f"{str_uncompressedMain}", "rb") as file_Main:
+        sequence: bin = bytes.fromhex(SEARCH_SEQUENCE)
+        with open(f"{uncompressedMain}", "rb") as mainFile:
             # I'm assuming this reads the entire file at once?
-            bin_fileContents = file_Main.read()
+            fileContents: bin = mainFile.read()
             try:
                 # I'm assuming this searches the file buffer for the sequence?
-                int_hexOffset = bin_fileContents.index(bin_sequence)
+                hexOffset: int = fileContents.index(sequence)
                 # Print it was found
-                print("Sequence found at offset: " + hex(int_hexOffset))
+                print("Sequence found at offset: " + hex(hexOffset))
 
                 # Create ips patch
-                ips_patch = ips.Patch()
-                ips_patch.ips32 = False
-                bin_patchData = bytes.fromhex(str_newHex)
-                ips_patch.add_record(int_hexOffset, bin_patchData)
+                patch = ips.Patch()
+                patch.ips32 = False
+                patchData: bytes = bytes.fromhex(NEW_HEX)
+                patch.add_record(hexOffset, patchData)
 
                 # Write IPS file
-                str_ipsPatchPath = os.fsdecode(os.path.join(args_arguments.str_patchesFolder, str_buildID.replace(str_stripFromIPS, "") + ".ips"))
+                ipsPatchPath: str = os.fsdecode(os.path.join(ARGUMENTS.patchesFolder, buildID.replace(STRIP_FROM_IPS, "") + ".ips"))
 
-                print(f"IPS patch written to: {str_ipsPatchPath}")
+                print(f"IPS patch written to: {ipsPatchPath}")
 
                 # Open IPS file and write out the patch.
-                with open(f"{str_ipsPatchPath}", "wb") as file_ipsFile:
-                    file_ipsFile.write(bytes(ips_patch))
+                with open(f"{ipsPatchPath}", "wb") as ipsFile:
+                    ipsFile.write(bytes(patch))
 
             except ValueError:
                 print("Error creating IPS patch.")
