@@ -7,4 +7,6 @@ build/
 dist
 PatchGen
 *.zip
-hactool
+hactool.exe
+registered
+venv
