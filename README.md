@@ -35,7 +35,7 @@ Using PNG provides lossless compression that preserves the quality of the captur
 1. Download the latest release from the [Releases page](https://github.com/J-D-K/PNGShot/releases/).  
 2. Extract the contents of the ZIP archive to the **root** of your Switch’s SD card.  
 3. ***(Optional)*** To keep system JPEG captures, create an empty file named `sdmc:/config/PNGShot/allow_jpegs`
-4. If a future Switch firmware update causes compatibility issues, check the [patches directory](https://github.com/J-D-K/PNGShot/tree/master/exefs_patches/vi_patches) for updated patches. In most cases, if PNGShot breaks after a firmware update, this is the cause. the sysmodule code itself is extremely stable.
+4. If a future Switch firmware update causes compatibility issues, check the [patches directory](https://github.com/J-D-K/PNGShot/tree/master/exefs_patches/vi_patches) for updated patches. In most cases, if PNGShot breaks after a firmware update, this is the cause. The sysmodule code itself is extremely stable.
 
 ## Building from source
 ### Requirements
