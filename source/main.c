@@ -1,16 +1,16 @@
+#include "FSFILE.h"
 #include "capture.h"
-#include "fsfile.h"
+
 #include <stdio.h>
 #include <switch.h>
 #include <sys/stat.h>
 
 // Macro to fail with. Not the right error code but whatever.
-#define ABORT_ON_FAILURE(x)                                                                                                                    \
-    if (R_FAILED(x))                                                                                                                           \
-    diagAbortWithResult(MAKERESULT(Module_Libnx, x))
+#define ABORT_ON_FAILURE(x)                                                                                                    \
+    if (R_FAILED(x)) diagAbortWithResult(MAKERESULT(Module_Libnx, x))
 
 // Libnx sysmodule stuff.
-uint32_t __nx_applet_type = AppletType_None;
+uint32_t __nx_applet_type     = AppletType_None;
 uint32_t __nx_fs_num_sessions = 1;
 
 #define INNER_HEAP_SIZE 0x60000
@@ -26,7 +26,7 @@ void __libnx_initheap(void)
 
     // Make it point to the place ya know
     fake_heap_start = innerHeap;
-    fake_heap_end = innerHeap + INNER_HEAP_SIZE;
+    fake_heap_end   = innerHeap + INNER_HEAP_SIZE;
 }
 
 // I just think this looks a bit nicer?
@@ -67,10 +67,7 @@ static Result openAlbumDirectory(FsFileSystem *filesystem)
 {
     // Try to open SD album first. If it fails, fall back to NAND.
     Result fsError = fsOpenImageDirectoryFileSystem(filesystem, FsImageDirectoryId_Sd);
-    if (R_FAILED(fsError))
-    {
-        fsError = fsOpenImageDirectoryFileSystem(filesystem, FsImageDirectoryId_Nand);
-    }
+    if (R_FAILED(fsError)) { fsError = fsOpenImageDirectoryFileSystem(filesystem, FsImageDirectoryId_Nand); }
     return fsError;
 }
 
@@ -96,19 +93,12 @@ static void checkForJpeg(void)
     FsFileSystem sdmc;
     // Do not call this directly lol.
     Result fsError = fsOpenSdCardFileSystem(&sdmc);
-    if (R_FAILED(fsError))
-    {
-        return;
-    }
+    if (R_FAILED(fsError)) { return; }
 
-    if (FSFILEExists(&sdmc, "/config/PNGShot/allow_jpegs"))
-    {
-        g_noJpeg = false;
-    }
+    if (FSFILE_Exists(&sdmc, "/config/PNGShot/allow_jpegs")) { g_noJpeg = false; }
     // Close sdmc
     fsFsClose(&sdmc);
 }
-
 
 int main(void)
 {
@@ -126,8 +116,8 @@ int main(void)
     ABORT_ON_FAILURE(openAlbumDirectory(&albumDirectory));
     ABORT_ON_FAILURE(createPNGShotDirectory(&albumDirectory));
 
-    bool held = false;  // Track if the button is held
-    u64 start_tick = 0; // Time when the button press started/
+    bool held      = false; // Track if the button is held
+    u64 start_tick = 0;     // Time when the button press started/
 
     const u64 upperThreshold = 500000000;
     const u64 lowerThreshold = 50000000;
@@ -146,7 +136,7 @@ int main(void)
             if (elapsed_ns >= upperThreshold || !held) // More than 500 ms
             {
                 // If button was not already held, start holding
-                held = true;
+                held       = true;
                 start_tick = armGetSystemTick();
             }
             else
@@ -158,7 +148,7 @@ int main(void)
                     captureScreenshot(&albumDirectory);
                 }
                 // Reset the state
-                held = false;
+                held       = false;
                 start_tick = 0;
             }
         }
