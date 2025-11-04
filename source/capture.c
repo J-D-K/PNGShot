@@ -1,4 +1,5 @@
 #include "FSFILE.h"
+#include "jpeg.h"
 
 #include <ctype.h> // Include for tolower
 #include <malloc.h>
@@ -12,9 +13,6 @@
 // This is used to jump to the cleanup label in capture
 #define CLEANUP_AND_ABORT_IF(x)                                                                                                \
     if (x) goto cleanup
-
-// This is whether or not to nuke the jpeg after the PNG is taken.
-bool g_noJpeg = true;
 
 // Just in case this stuff changes.
 static const int SCREENSHOT_WIDTH     = 1280;
@@ -129,5 +127,5 @@ cleanup:
     // Rename it and hope it works.
     fsFsRenameFile(filesystem, TEMPORARY_FILE_NAME, finalPath);
 
-    if (g_noJpeg) { deleteJPEGCapture(filesystem, timestamp.created); }
+    if (jpeg_needs_deletion()) { jpeg_delete_capture(filesystem, timestamp.created); }
 }

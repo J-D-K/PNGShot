@@ -2,24 +2,21 @@
 
 bool init_open_album_directory(FsFileSystem *albumOut)
 {
-    bool openError = R_FAILED(fsOpenImageDirectoryFileSystem(albumOut, FsImageDirectoryId_Sd));
-    if (openError) { openError = R_FAILED(fsOpenImageDirectoryFileSystem(albumOut, FsImageDirectoryId_Nand)); }
+    bool opened = R_SUCCEEDED(fsOpenImageDirectoryFileSystem(albumOut, FsImageDirectoryId_Sd));
+    if (!opened) { opened = R_SUCCEEDED(fsOpenImageDirectoryFileSystem(albumOut, FsImageDirectoryId_Nand)); }
 
-    // This is weird, but trust me.
-    return openError == false;
+    return opened;
 }
 
 bool init_create_pngshot_directory(FsFileSystem *albumDir)
 {
     // Path.
-    static const char *PNGSHOT_DIR = "/PNGs";
-
-    // Needed flags.
-    static const uint32_t DIR_FLAGS = FsDirOpenMode_ReadFiles | FsDirOpenMode_ReadDirs;
+    static const char *PNGSHOT_DIR       = "/PNGs";
+    static const uint32_t DIR_OPEN_FLAGS = FsDirOpenMode_ReadDirs | FsDirOpenMode_ReadFiles;
 
     // Check if it already exists.
     FsDir handle;
-    const bool opened = R_SUCCEEDED(fsFsOpenDirectory(albumDir, PNGSHOT_DIR, DIR_FLAGS, &handle));
+    const bool opened = R_SUCCEEDED(fsFsOpenDirectory(albumDir, PNGSHOT_DIR, DIR_OPEN_FLAGS, &handle));
     // It exists already. Just return true.
     if (opened)
     {

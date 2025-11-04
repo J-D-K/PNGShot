@@ -1,6 +1,7 @@
 #include "FSFILE.h"
 #include "capture.h"
 #include "init.h"
+#include "jpeg.h"
 
 #include <stdio.h>
 #include <switch.h>
@@ -14,7 +15,7 @@
 uint32_t __nx_applet_type     = AppletType_None;
 uint32_t __nx_fs_num_sessions = 1;
 
-#define INNER_HEAP_SIZE 0x50000
+#define INNER_HEAP_SIZE 0x60000
 
 // Initializes heap
 void __libnx_initheap(void)
@@ -63,19 +64,6 @@ void __appExit(void)
     hidsysExit();
 }
 
-// Opens the sd card quickly to check if PNGShot should allow jpegs to be captured.
-static void checkForJpeg(void)
-{
-    FsFileSystem sdmc;
-    // Do not call this directly lol.
-    Result fsError = fsOpenSdCardFileSystem(&sdmc);
-    if (R_FAILED(fsError)) { return; }
-
-    if (FSFILE_Exists(&sdmc, "/config/PNGShot/allow_jpegs")) { g_noJpeg = false; }
-    // Close sdmc
-    fsFsClose(&sdmc);
-}
-
 int main(void)
 {
     // Get event handle for capture button
@@ -85,12 +73,12 @@ int main(void)
     eventClear(&captureButtonEvent);
 
     // Detects if sdmc:/config/PNGShot/allow_jpegs exists and sets the global bool
-    checkForJpeg();
+    jpeg_check_for_flag();
 
     // Open album directory and make sure folder exists.
     FsFileSystem albumDir;
-    ABORT_ON_FAILURE(init_open_album_directory(&albumDir));
-    ABORT_ON_FAILURE(init_create_pngshot_directory(&albumDir));
+    if (!init_open_album_directory(&albumDir)) { return -1; }
+    else if (!init_create_pngshot_directory(&albumDir)) { return -2; }
 
     bool held      = false; // Track if the button is held
     u64 start_tick = 0;     // Time when the button press started/
