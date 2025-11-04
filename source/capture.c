@@ -47,68 +47,15 @@ static inline void rgbaStripAlpha(restrict png_bytep rgbaData)
     for (int i = 0, j = 0; i < SCREENSHOT_WIDTH * 4; i += 4, j += 3) { memcpy(&rgbaData[j], &rgbaData[i], 3); }
 }
 
-void deleteJPEGCapture(FsFileSystem *albumDirectory, uint64_t referenceTimestamp)
-{
-    // Convert posix stamp from switch to something more usable.
-    struct tm *localTime = localtime((const time_t *)&referenceTimestamp);
-
-    // Used to get the target file.
-    uint64_t lowestTimeDelta         = -1;
-    char targetJpegPath[FS_MAX_PATH] = {0};
-
-    // Don't waste time trying to open every folder.
-    char directoryPath[FS_MAX_PATH] = {0};
-    snprintf(directoryPath,
-             FS_MAX_PATH,
-             "/%04d/%02d/%02d",
-             localTime->tm_year + 1900,
-             localTime->tm_mon + 1,
-             localTime->tm_mday);
-
-    // Try opening directory for current day screenshots.
-    FsDir albumDir;
-    if (R_FAILED(fsFsOpenDirectory(albumDirectory, directoryPath, FsDirOpenMode_ReadFiles | FsDirOpenMode_ReadDirs, &albumDir)))
-    {
-        return;
-    }
-
-    int64_t entriesRead = 0;
-    FsDirectoryEntry dirEntry;
-    while (R_SUCCEEDED(fsDirRead(&albumDir, &entriesRead, 1, &dirEntry)) && entriesRead > 0)
-    {
-        if (!(dirEntry.type & FsDirEntryType_File)) { continue; }
-
-        const char *fileExtension = strchr(dirEntry.name, '.') + 1;
-        if (strcmp(fileExtension, "jpg") != 0) { continue; }
-
-        // Path for target jpeg
-        char jpegPath[FS_MAX_PATH] = {0};
-        snprintf(jpegPath, FS_MAX_PATH, "%s/%s", directoryPath, dirEntry.name);
-
-        FsTimeStampRaw jpegTimeStamp;
-        if (R_FAILED(fsFsGetFileTimeStampRaw(albumDirectory, jpegPath, &jpegTimeStamp))) { continue; }
-
-        uint64_t timeDelta = jpegTimeStamp.created > referenceTimestamp ? jpegTimeStamp.created - referenceTimestamp
-                                                                        : referenceTimestamp - jpegTimeStamp.created;
-
-        if (timeDelta < lowestTimeDelta)
-        {
-            lowestTimeDelta = timeDelta;
-            memcpy(targetJpegPath, jpegPath, FS_MAX_PATH);
-        }
-    }
-
-    fsDirClose(&albumDir);
-    if (lowestTimeDelta != (uint64_t)-1) { fsFsDeleteFile(albumDirectory, targetJpegPath); }
-}
-
 // Same as above, but safer and less memory hungry for a Switch sysmodule
 void captureScreenshot(FsFileSystem *filesystem)
 {
     png_structp pngWritingStruct = NULL;
     png_infop pngInfoStruct      = NULL;
-    png_bytep sourceRow          = NULL;
     FSFILE *pngFile              = NULL;
+
+    // Stack allocated to avoid more heap allocations.
+    unsigned char sourceRow[SCREENSHOT_WIDTH * sizeof(uint32_t)];
 
     {
         // These are useless and a waste of stack space.
@@ -126,9 +73,6 @@ void captureScreenshot(FsFileSystem *filesystem)
     pngWritingStruct = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
     pngInfoStruct    = png_create_info_struct(pngWritingStruct);
     CLEANUP_AND_ABORT_IF(!pngWritingStruct || !pngInfoStruct);
-
-    sourceRow = malloc(SCREENSHOT_WIDTH * 4); // Single RGBA row buffer
-    CLEANUP_AND_ABORT_IF(!sourceRow);
 
     pngFile = FSFILE_Open(filesystem, TEMPORARY_FILE_NAME); // Save to temporary path
     CLEANUP_AND_ABORT_IF(!pngFile);
@@ -163,7 +107,6 @@ cleanup:
     png_write_end(pngWritingStruct, pngInfoStruct);
     png_free_data(pngWritingStruct, pngInfoStruct, PNG_FREE_ALL, -1);
     png_destroy_write_struct(&pngWritingStruct, &pngInfoStruct);
-    free(sourceRow);
     FSFILE_Close(pngFile);
     capsscCloseRawScreenShotReadStream();
 

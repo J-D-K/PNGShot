@@ -1,5 +1,6 @@
 #include "FSFILE.h"
 #include "capture.h"
+#include "init.h"
 
 #include <stdio.h>
 #include <switch.h>
@@ -13,7 +14,7 @@
 uint32_t __nx_applet_type     = AppletType_None;
 uint32_t __nx_fs_num_sessions = 1;
 
-#define INNER_HEAP_SIZE 0x60000
+#define INNER_HEAP_SIZE 0x50000
 
 // Initializes heap
 void __libnx_initheap(void)
@@ -30,7 +31,7 @@ void __libnx_initheap(void)
 }
 
 // I just think this looks a bit nicer?
-static inline void initLibnxFirmwareVersion(void)
+static inline void init_libnx_firm_version(void)
 {
     if (R_SUCCEEDED(setsysInitialize()))
     {
@@ -46,7 +47,7 @@ static inline void initLibnxFirmwareVersion(void)
 void __appInit(void)
 {
     ABORT_ON_FAILURE(smInitialize());
-    initLibnxFirmwareVersion();
+    init_libnx_firm_version();
     ABORT_ON_FAILURE(hidsysInitialize());
     ABORT_ON_FAILURE(fsInitialize());
     ABORT_ON_FAILURE(capsscInitialize());
@@ -60,31 +61,6 @@ void __appExit(void)
     fsdevUnmountAll();
     fsExit();
     hidsysExit();
-}
-
-// This tries to open the album directory first on SD, if that fails, NAND.
-static Result openAlbumDirectory(FsFileSystem *filesystem)
-{
-    // Try to open SD album first. If it fails, fall back to NAND.
-    Result fsError = fsOpenImageDirectoryFileSystem(filesystem, FsImageDirectoryId_Sd);
-    if (R_FAILED(fsError)) { fsError = fsOpenImageDirectoryFileSystem(filesystem, FsImageDirectoryId_Nand); }
-    return fsError;
-}
-
-// This checks for and creates the PNGShot directory if it doesn't exist.
-static Result createPNGShotDirectory(FsFileSystem *filesystem)
-{
-    // Check if it exists first.
-    FsDir directoryHandle;
-    Result fsError = fsFsOpenDirectory(filesystem, "/PNGs", FsDirOpenMode_ReadDirs | FsDirOpenMode_ReadFiles, &directoryHandle);
-    if (R_FAILED(fsError))
-    {
-        // If it failed, assume it doesn't exist and try to create it.
-        fsError = fsFsCreateDirectory(filesystem, "/PNGs");
-    }
-    // Close it if it's open.
-    fsDirClose(&directoryHandle);
-    return fsError;
 }
 
 // Opens the sd card quickly to check if PNGShot should allow jpegs to be captured.
@@ -112,9 +88,9 @@ int main(void)
     checkForJpeg();
 
     // Open album directory and make sure folder exists.
-    FsFileSystem albumDirectory;
-    ABORT_ON_FAILURE(openAlbumDirectory(&albumDirectory));
-    ABORT_ON_FAILURE(createPNGShotDirectory(&albumDirectory));
+    FsFileSystem albumDir;
+    ABORT_ON_FAILURE(init_open_album_directory(&albumDir));
+    ABORT_ON_FAILURE(init_create_pngshot_directory(&albumDir));
 
     bool held      = false; // Track if the button is held
     u64 start_tick = 0;     // Time when the button press started/
@@ -145,7 +121,7 @@ int main(void)
                 if (elapsed_ns >= lowerThreshold && elapsed_ns < upperThreshold) // Between 50 ms and 500 ms
                 {
                     // Valid quick press detected, proceed to capture screenshot to temp path
-                    captureScreenshot(&albumDirectory);
+                    captureScreenshot(&albumDir);
                 }
                 // Reset the state
                 held       = false;
