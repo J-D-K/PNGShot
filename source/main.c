@@ -1,7 +1,7 @@
 #include "FSFILE.h"
-#include "capture.h"
 #include "init.h"
 #include "jpeg.h"
+#include "png_capture.h"
 
 #include <stdio.h>
 #include <switch.h>
@@ -109,7 +109,7 @@ int main(void)
                 if (elapsed_ns >= lowerThreshold && elapsed_ns < upperThreshold) // Between 50 ms and 500 ms
                 {
                     // Valid quick press detected, proceed to capture screenshot to temp path
-                    captureScreenshot(&albumDir);
+                    png_capture(&albumDir);
                 }
                 // Reset the state
                 held       = false;
