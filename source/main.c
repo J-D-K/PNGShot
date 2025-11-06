@@ -3,9 +3,9 @@
 #include "jpeg.h"
 #include "png_capture.h"
 
+#include <stdbool.h>
 #include <stdio.h>
 #include <switch.h>
-#include <sys/stat.h>
 
 // Macro to fail with. Not the right error code but whatever.
 #define ABORT_ON_FAILURE(x)                                                                                                    \
@@ -34,15 +34,19 @@ void __libnx_initheap(void)
 // I just think this looks a bit nicer?
 static inline void init_libnx_firm_version(void)
 {
-    if (R_SUCCEEDED(setsysInitialize()))
+    const bool setSysError = R_FAILED(setsysInitialize());
+    if (setSysError) { return; }
+
+    SetSysFirmwareVersion firmVersion;
+    const bool firmError = R_FAILED(setsysGetFirmwareVersion(&firmVersion));
+    if (firmError)
     {
-        SetSysFirmwareVersion firmwareVersion;
-        if (R_SUCCEEDED(setsysGetFirmwareVersion(&firmwareVersion)))
-        {
-            hosversionSet(MAKEHOSVERSION(firmwareVersion.major, firmwareVersion.minor, firmwareVersion.micro));
-        }
         setsysExit();
+        return;
     }
+
+    hosversionSet(MAKEHOSVERSION(firmVersion.major, firmVersion.minor, firmVersion.micro));
+    setsysExit();
 }
 
 void __appInit(void)
@@ -66,13 +70,16 @@ void __appExit(void)
 
 int main(void)
 {
-    // Get event handle for capture button
-    Event captureButtonEvent;
-    // Calling this with auto-clear fails.
-    ABORT_ON_FAILURE(hidsysAcquireCaptureButtonEventHandle(&captureButtonEvent, false));
-    eventClear(&captureButtonEvent);
+    // Thresholds for capturing.
+    static const uint64_t UPPER_THRESHOLD = 500000000;
+    static const uint64_t LOWER_THRESHOLD = 50000000;
 
-    // Detects if sdmc:/config/PNGShot/allow_jpegs exists and sets the global bool
+    // Get the capture handle before continuing.
+    Event captureButton;
+    ABORT_ON_FAILURE(hidsysAcquireCaptureButtonEventHandle(&captureButton, false));
+    ABORT_ON_FAILURE(eventClear(&captureButton));
+
+    // Check for the flag to allow jpegs to be captured too.
     jpeg_check_for_flag();
 
     // Open album directory and make sure folder exists.
@@ -80,42 +87,35 @@ int main(void)
     if (!init_open_album_directory(&albumDir)) { return -1; }
     else if (!init_create_pngshot_directory(&albumDir)) { return -2; }
 
-    bool held      = false; // Track if the button is held
-    u64 start_tick = 0;     // Time when the button press started/
-
-    const u64 upperThreshold = 500000000;
-    const u64 lowerThreshold = 50000000;
-
-    // Loop forever, waiting for capture button event.
+    bool captureHeld    = false; // Tracks whether the button was held.
+    uint64_t beginTicks = 0;     // The beginning tick number when the button was first pressed.
     while (true)
     {
-        // Check for button press event
-        if (R_SUCCEEDED(eventWait(&captureButtonEvent, UINT64_MAX))) // await indefinitely
+        // Wait for the capture button to be pressed.
+        const bool capturePressed = R_SUCCEEDED(eventWait(&captureButton, UINT64_MAX));
+        const bool captureCleared = R_SUCCEEDED(eventClear(&captureButton));
+        // I guess technically it's possible for the timeout to expire.
+        if (!capturePressed && !captureCleared) { continue; }
+
+        // Calculate this stuff.
+        const uint64_t systemTicks = armGetSystemTick();
+        const uint64_t elapsedNano = armTicksToNs(systemTicks - beginTicks);
+
+        // Conditions for capture.
+        // There's a ghost press when the system first starts.
+        const bool beginHold  = elapsedNano >= UPPER_THRESHOLD;
+        const bool validPress = captureHeld && elapsedNano >= LOWER_THRESHOLD && elapsedNano < UPPER_THRESHOLD;
+        if (beginHold)
         {
-            eventClear(&captureButtonEvent);
-
-            // If the button was held for more than 500 ms, reset
-            u64 elapsed_ns = armTicksToNs(armGetSystemTick() - start_tick);
-
-            if (elapsed_ns >= upperThreshold || !held) // More than 500 ms
-            {
-                // If button was not already held, start holding
-                held       = true;
-                start_tick = armGetSystemTick();
-            }
-            else
-            {
-                // If button was already held and now released
-                if (elapsed_ns >= lowerThreshold && elapsed_ns < upperThreshold) // Between 50 ms and 500 ms
-                {
-                    // Valid quick press detected, proceed to capture screenshot to temp path
-                    png_capture(&albumDir);
-                }
-                // Reset the state
-                held       = false;
-                start_tick = 0;
-            }
+            beginTicks  = systemTicks;
+            captureHeld = true;
         }
+        else if (validPress)
+        {
+            png_capture(&albumDir);
+            captureHeld = false;
+        }
+        else { captureHeld = false; }
     }
 
     return 0;
