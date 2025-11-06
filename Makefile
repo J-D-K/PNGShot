@@ -50,7 +50,7 @@ DIST		:=	dist
 #---------------------------------------------------------------------------------
 ARCH	:=	-march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE
 
-CFLAGS	:=	-g -Wall -Os -ffunction-sections -fdata-sections -flto -fomit-frame-pointer \
+CFLAGS	:=	-g -Wall -O3 -Os -ffunction-sections -fdata-sections -flto -fomit-frame-pointer \
 			-finline-small-functions $(ARCH) $(DEFINES)
 
 CFLAGS	+=	$(INCLUDE) -D__SWITCH__
