@@ -11,6 +11,7 @@
 #include <string.h>
 #include <switch.h>
 #include <time.h>
+#include <arm_neon.h>
 
 // These are used in a couple of different places.
 static const int SCREENSHOT_WIDTH  = 1280;
