@@ -161,7 +161,7 @@ static inline bool png_init_structs(png_structpp writeStruct, png_infopp infoStr
         return false;
     }
 
-    png_set_compression_level(*writeStruct, 9);
+    png_set_compression_level(*writeStruct, 4);
     return true;
 }
 
