@@ -50,16 +50,16 @@ DIST		:=	dist
 #---------------------------------------------------------------------------------
 ARCH	:=	-march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE
 
-CFLAGS	:=	-g -Wall -O3 -Os -ffunction-sections -fdata-sections -flto -fomit-frame-pointer \
+CFLAGS	:=	-g -Wall -O3 -Os -ffunction-sections -fdata-sections -flto=auto -fomit-frame-pointer \
 			-finline-small-functions $(ARCH) $(DEFINES)
 
 CFLAGS	+=	$(INCLUDE) -D__SWITCH__
 CXXFLAGS	:= $(CFLAGS) -fno-rtti -fno-exceptions  -fno-unwind-tables -fno-asynchronous-unwind-tables \
-			   -flto -fuse-linker-plugin -flto=6
+				-fuse-linker-plugin
 
 ASFLAGS	:=	-g $(ARCH)
 LDFLAGS	=	-specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map) \
-			-Wl,--as-needed -flto=6
+			-Wl,--as-needed
 
 LIBS	:= -lnx -lpng -lz
 

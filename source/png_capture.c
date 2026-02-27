@@ -11,6 +11,7 @@
 #include <string.h>
 #include <switch.h>
 #include <time.h>
+#include <arm_neon.h>
 
 // These are used in a couple of different places.
 static const int SCREENSHOT_WIDTH  = 1280;
@@ -161,7 +162,7 @@ static inline bool png_init_structs(png_structpp writeStruct, png_infopp infoStr
         return false;
     }
 
-    png_set_compression_level(*writeStruct, 9);
+    png_set_compression_level(*writeStruct, 4);
     return true;
 }
 
@@ -199,8 +200,16 @@ static inline void png_init_io_write_info(png_structp writeStruct, png_infop inf
 
 static inline void rgba_strip_alpha(restrict png_bytep row)
 {
-    for (int i = 0, j = 0; i < SCREENSHOT_WIDTH * 4; i += 4, j += 3)
-    {
+    int i = 0;
+    int j = 0;
+
+    for (; i <= (SCREENSHOT_WIDTH - 16) * 4; i += 64, j += 48) {
+        uint8x16x4_t rgba = vld4q_u8(row + i);
+        uint8x16x3_t rgb = {{ rgba.val[0], rgba.val[1], rgba.val[2] }};
+        vst3q_u8(row + j, rgb);
+    }
+
+    for (; i < SCREENSHOT_WIDTH * 4; i += 4, j += 3) {
         row[j]     = row[i];
         row[j + 1] = row[i + 1];
         row[j + 2] = row[i + 2];
