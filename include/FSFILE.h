@@ -23,12 +23,14 @@ bool FSFILE_Delete(FsFileSystem *filesystem, const char *path);
 /// failure.
 /// @param filesystem Filesystem to open the file from.
 /// @param filePath Path to open.
+/// @param CREATING_SIZE How much space reserve for file upfront.
 FSFILE *FSFILE_Open(FsFileSystem *filesystem, const char *path, int64_t CREATING_SIZE);
 
 /// @brief Attempts to write the buffer to the FSFILE passed.
 /// @param file File to write to.FSFILE *file,
 /// @param buffer Buffer to write.
 /// @param size Size of the buffer to write.
+/// @param resize Resize file before writing.
 /// @return Bytes written on success. -1 on failure.
 ssize_t FSFILE_Write(FSFILE *file, void *buffer, size_t size, bool resize);
 
