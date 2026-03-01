@@ -1,12 +1,28 @@
 #include "FSFILE.h"
 
 #include <malloc.h>
-#include <stdbool.h>
+
+/// @brief This is just so we have structure.
+enum FileModes : uint8_t
+{
+    Reading,
+    Writing
+};
 
 // clang-format off
+/// @brief Actual FSFILE struct.
 struct FSFILE
 {
+    /// @brief The actual handle.
     FsFile handle;
+
+    /// @brief The mode in which the file is opened.
+    uint8_t mode;
+
+    /// @brief Size of the file.
+    int64_t size;
+
+    /// @brief Current offset.
     int64_t offset;
 };
 // clang-format on
@@ -32,62 +48,110 @@ bool FSFILE_Delete(FsFileSystem *filesystem, const char *path)
     return R_SUCCEEDED(fsFsDeleteFile(filesystem, path));
 }
 
-FSFILE *FSFILE_Open(FsFileSystem *filesystem, const char *path)
+FSFILE *FSFILE_OpenRead(FsFileSystem *filesystem, const char *path)
 {
-    // Both of these are zero to start since we don't have any idea what the ending PNG size will be.
-    static const int64_t CREATING_SIZE    = 0;
-    static const uint32_t CREATING_OPTION = 0;
+    // Allocate.
+    FSFILE *file = malloc(sizeof(FSFILE));
+    if (!file) { goto abort; }
 
-    // Check if it exists. If it doesn't create it.
-    const bool exists  = FSFILE_Exists(filesystem, path);
-    const bool deleted = exists && FSFILE_Delete(filesystem, path);
-    if (exists && !deleted) { goto cleanup; }
+    // Attempt opening before continuing at all.
+    const bool opened = R_SUCCEEDED(fsFsOpenFile(filesystem, path, FsOpenMode_Read, &file->handle));
+    if (!opened) { goto abort; }
 
-    // Try to create it. If we can't cleanup and return NULL.
-    const bool createError = R_FAILED(fsFsCreateFile(filesystem, path, CREATING_SIZE, CREATING_OPTION));
-    if (createError) { goto cleanup; }
+    // Get the size.
+    const bool getSize = R_SUCCEEDED(fsFileGetSize(&file->handle, &file->size));
+    if (!getSize) { goto abort; }
 
-    // Allocate our return data.
-    FSFILE *fsfile = malloc(sizeof(FSFILE));
-    if (!fsfile) { goto cleanup; }
+    // Set offset and mode.
+    file->offset = 0;
+    file->mode   = Reading;
 
-    // Attempt to open the file for writing.
-    const bool openError = R_FAILED(fsFsOpenFile(filesystem, path, FsOpenMode_Write, &fsfile->handle));
-    if (openError) { goto cleanup; }
+    // Success ending achieved.
+    return file;
 
-    // Set the offset to 0.
-    fsfile->offset = 0;
-
-    // Return the data.
-    return fsfile;
-
-cleanup:
-    // If this actually exists, the only error that would send it here is it failing to open, so no need to worry about closing
-    // the handle.
-    if (fsfile) { free(fsfile); }
+abort:
+    if (file)
+    {
+        // Not sure there's really a way to check this and screw adding a bool for it.
+        fsFileClose(&file->handle);
+        free(file);
+    }
 
     return NULL;
 }
 
-ssize_t FSFILE_Write(FSFILE *file, void *buffer, size_t size)
+FSFILE *FSFILE_OpenWrite(FsFileSystem *filesystem, const char *path, int64_t size)
+{
+    // Preliminary stuff before anything really important.
+    const bool exists  = FSFILE_Exists(filesystem, path);
+    const bool deleted = exists && FSFILE_Delete(filesystem, path);
+    if (exists && !deleted) { goto abort; }
+
+    // Try to create it.
+    const bool created = R_SUCCEEDED(fsFsCreateFile(filesystem, path, size, 0));
+    if (!created) { goto abort; }
+
+    // Allocate.
+    FSFILE *file = malloc(sizeof(FSFILE));
+    if (!file) { goto abort; }
+
+    // Open.
+    const bool opened = R_SUCCEEDED(fsFsOpenFile(filesystem, path, FsOpenMode_Write, &file->handle));
+    if (!opened) { goto abort; }
+
+    // Offset, size, and mode.
+    file->offset = 0;
+    file->size   = size;
+    file->mode   = Writing;
+
+    return file;
+
+abort:
+    if (file) { free(file); }
+
+    return NULL;
+}
+
+ssize_t FSFILE_Read(FSFILE *file, void *buffer, size_t size)
+{
+    if (!file || !buffer || file->mode != Reading) { return -1; }
+
+    // Read.
+    uint64_t bytesRead = 0;
+    const bool read    = R_SUCCEEDED(fsFileRead(&file->handle, file->offset, buffer, size, FsReadOption_None, &bytesRead));
+    if (!read) { return -1; }
+
+    // Update offset.
+    file->offset += bytesRead;
+
+    return (ssize_t)bytesRead;
+}
+
+ssize_t FSFILE_Write(FSFILE *file, const void *buffer, size_t size)
 {
     // Do not continue if we're not passed valid data.
-    if (!file || !buffer) { return -1; }
+    if (!file || !buffer || file->mode != Writing) { return -1; }
 
-    // Update the size of the file.
-    const int64_t newSize = file->offset + size;
-    const bool sizeError  = R_FAILED(fsFileSetSize(&file->handle, newSize));
-    if (sizeError) { return -1; }
+    // Whether or not the file needs to be resized.
+    const int64_t endSize  = file->offset + size;
+    const bool needsResize = endSize > file->size;
+    const bool resized     = needsResize && R_SUCCEEDED(fsFileSetSize(&file->handle, endSize));
+    if (needsResize && !resized) { return -1; }
 
     // Attempt to write the data.
-    const bool writeError = R_FAILED(fsFileWrite(&file->handle, file->offset, buffer, size, FsWriteOption_None));
-    if (writeError) { return -1; }
+    const bool dataWritten = R_SUCCEEDED(fsFileWrite(&file->handle, file->offset, buffer, size, FsWriteOption_None));
+    if (!dataWritten) { return -1; }
 
-    // Update the offset and return the size.
+    // Update the offset and size if needed.
     file->offset += size;
+    file->size = file->offset > file->size ? file->offset : file->size;
 
     return size;
 }
+
+ssize_t FSFILE_GetSize(FSFILE *file) { return file->size; }
+
+bool FSFILE_SetSize(FSFILE *file, int64_t size) { return R_SUCCEEDED(fsFileSetSize(&file->handle, size)); }
 
 bool FSFILE_Flush(FSFILE *file)
 {
@@ -106,4 +170,17 @@ void FSFILE_Close(FSFILE *file)
 
     // Free the data
     free(file);
+}
+
+void FSFILE_Finalize(FSFILE *file)
+{
+    // Start with flush.
+    FSFILE_Flush(file);
+
+    // Set the size according to what the file internally thinks it is. Note: I don't like this. Might need to revise. Serves
+    // its purpose though.
+    FSFILE_SetSize(file, file->offset);
+
+    // Close.
+    FSFILE_Close(file);
 }

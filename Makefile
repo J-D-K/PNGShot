@@ -50,7 +50,7 @@ DIST		:=	dist
 #---------------------------------------------------------------------------------
 ARCH	:=	-march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE
 
-CFLAGS	:=	-g -Wall -O3 -Os -ffunction-sections -fdata-sections -flto=auto -fomit-frame-pointer \
+CFLAGS	:=	-g -Wall -O3 -ffunction-sections -fdata-sections -flto=auto -fomit-frame-pointer \
 			-finline-small-functions $(ARCH) $(DEFINES)
 
 CFLAGS	+=	$(INCLUDE) -D__SWITCH__
@@ -61,7 +61,7 @@ ASFLAGS	:=	-g $(ARCH)
 LDFLAGS	=	-specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map) \
 			-Wl,--as-needed
 
-LIBS	:= -lnx -lpng -lz
+LIBS	:= -lnx -lpng -lz -ljson-c
 
 #---------------------------------------------------------------------------------
 # list of directories containing libraries, this must be the top level containing

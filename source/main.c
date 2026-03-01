@@ -1,6 +1,6 @@
 #include "FSFILE.h"
+#include "config.h"
 #include "init.h"
-#include "jpeg.h"
 #include "png_capture.h"
 
 #include <stdbool.h>
@@ -9,7 +9,10 @@
 
 // Macro to fail with. Not the right error code but whatever.
 #define ABORT_ON_FAILURE(x)                                                                                                    \
-    if (R_FAILED(x)) diagAbortWithResult(MAKERESULT(Module_Libnx, x))
+    {                                                                                                                          \
+        const Result res = x;                                                                                                  \
+        if (R_FAILED(res)) { diagAbortWithResult(res); }                                                                       \
+    }
 
 // Libnx sysmodule stuff.
 uint32_t __nx_applet_type     = AppletType_None;
@@ -74,13 +77,13 @@ int main(void)
     static const uint64_t UPPER_THRESHOLD = 500000000;
     static const uint64_t LOWER_THRESHOLD = 50000000;
 
+    // Config load.
+    config_load();
+
     // Get the capture handle before continuing.
     Event captureButton;
     ABORT_ON_FAILURE(hidsysAcquireCaptureButtonEventHandle(&captureButton, false));
     ABORT_ON_FAILURE(eventClear(&captureButton));
-
-    // Check for the flag to allow jpegs to be captured too.
-    jpeg_check_for_flag();
 
     // Open album directory and make sure folder exists.
     FsFileSystem albumDir;
@@ -115,7 +118,10 @@ int main(void)
             png_capture(&albumDir);
             captureHeld = false;
         }
-        else { captureHeld = false; }
+        else
+        {
+            captureHeld = false;
+        }
     }
 
     return 0;

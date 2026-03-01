@@ -1,7 +1,9 @@
 #include "FSFILE.h"
+#include "config.h"
 #include "fsdir.h"
 #include "jpeg.h"
 
+#include <arm_neon.h>
 #include <ctype.h> // Include for tolower
 #include <malloc.h>
 #include <png.h>
@@ -11,7 +13,6 @@
 #include <string.h>
 #include <switch.h>
 #include <time.h>
-#include <arm_neon.h>
 
 // These are used in a couple of different places.
 static const int SCREENSHOT_WIDTH  = 1280;
@@ -21,6 +22,7 @@ static const int SCREENSHOT_HEIGHT = 720;
 static const char *TEMPORARY_NAME = "/PNGs/temp.png";
 
 // Defined at bottom.
+
 // These are needed to make libpng work with the raw FS commands.
 static void png_write_function(png_structp writingStruct, png_bytep pngData, png_size_t length);
 static void png_flush_function(png_structp writingStruct);
@@ -65,6 +67,9 @@ static inline void move_rename_screenshot(FsFileSystem *filesystem, uint64_t tim
 // Same as above, but safer and less memory hungry for a Switch sysmodule
 void png_capture(FsFileSystem *filesystem)
 {
+    // File size for a full, uncompressed capture.
+    static const int64_t FILE_SIZE = 0x400000;
+
     png_structp writeStruct = NULL;
     png_infop infoStruct    = NULL;
     FSFILE *pngFile         = NULL;
@@ -75,7 +80,7 @@ void png_capture(FsFileSystem *filesystem)
     else if (!png_init_structs(&writeStruct, &infoStruct)) { return; }
 
     // Attempt to open temporary output file.
-    pngFile = FSFILE_Open(filesystem, TEMPORARY_NAME);
+    pngFile = FSFILE_OpenWrite(filesystem, TEMPORARY_NAME, FILE_SIZE);
     if (!pngFile) { goto cleanup; }
 
     // Initialize libpng to use our write functions and write the initial info.
@@ -98,7 +103,7 @@ void png_capture(FsFileSystem *filesystem)
 cleanup:
     // This will finalize writing and destroy the structs.
     png_cleanup(&writeStruct, &infoStruct);
-    FSFILE_Close(pngFile);
+    FSFILE_Finalize(pngFile);
     capsscCloseRawScreenShotReadStream();
 
     FsTimeStampRaw timestamp;
@@ -111,7 +116,7 @@ cleanup:
     move_rename_screenshot(filesystem, timestamp.created);
 
     // Delete the jpeg if needed.
-    if (jpeg_needs_deletion()) { jpeg_delete_capture(filesystem, timestamp.created); }
+    if (!config_allow_jpeg()) { jpeg_delete_capture(filesystem, timestamp.created); }
 }
 
 static void png_write_function(png_structp writingStruct, png_bytep pngData, png_size_t length)
@@ -162,7 +167,9 @@ static inline bool png_init_structs(png_structpp writeStruct, png_infopp infoStr
         return false;
     }
 
-    png_set_compression_level(*writeStruct, 4);
+    const int level = config_compression_level();
+    png_set_compression_level(*writeStruct, level);
+
     return true;
 }
 
@@ -203,13 +210,15 @@ static inline void rgba_strip_alpha(restrict png_bytep row)
     int i = 0;
     int j = 0;
 
-    for (; i <= (SCREENSHOT_WIDTH - 16) * 4; i += 64, j += 48) {
+    for (; i <= (SCREENSHOT_WIDTH - 16) * 4; i += 64, j += 48)
+    {
         uint8x16x4_t rgba = vld4q_u8(row + i);
-        uint8x16x3_t rgb = {{ rgba.val[0], rgba.val[1], rgba.val[2] }};
+        uint8x16x3_t rgb  = {{rgba.val[0], rgba.val[1], rgba.val[2]}};
         vst3q_u8(row + j, rgb);
     }
 
-    for (; i < SCREENSHOT_WIDTH * 4; i += 4, j += 3) {
+    for (; i < SCREENSHOT_WIDTH * 4; i += 4, j += 3)
+    {
         row[j]     = row[i];
         row[j + 1] = row[i + 1];
         row[j + 2] = row[i + 2];

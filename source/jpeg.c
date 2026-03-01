@@ -6,37 +6,12 @@
 #include <string.h>
 #include <time.h>
 
-/// @brief This stores whether or not to delete jpeg captures from the SD card.
-static bool allowJpegs = false;
-
 // Defined at bottom.
 
 /// @brief Returns the absolute time difference between the two timestamps passed.
 /// @param stampA First stamp to compare.
 /// @param stampB Second stamp to compare.
 static inline uint64_t absolute_time_difference(uint64_t stampA, uint64_t stampB);
-
-void jpeg_check_for_flag()
-{
-    // This is the path of the flag we're looking for.
-    static const char *FLAG_PATH = "/config/PNGShot/allow_jpegs";
-
-    // Open the SD card temporarily even if we're not supposed to use this directly.
-    FsFileSystem sdmc;
-    const bool openError = R_FAILED(fsOpenSdCardFileSystem(&sdmc));
-    if (openError) { return; }
-
-    const bool flagExists = FSFILE_Exists(&sdmc, FLAG_PATH);
-    if (flagExists) { allowJpegs = true; }
-
-    fsFsClose(&sdmc);
-}
-
-bool jpeg_needs_deletion()
-{
-    // Seems backwards, but this is how I prefer it.
-    return allowJpegs == false;
-}
 
 bool jpeg_delete_capture(FsFileSystem *albumDir, uint64_t timestamp)
 {
