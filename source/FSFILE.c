@@ -69,7 +69,7 @@ cleanup:
 }
 
 bool FSFILE_Resize(FSFILE *file) {
-    return R_FAILED(fsFileSetSize(&file->handle, file->offset));
+    return R_SUCCEEDED(fsFileSetSize(&file->handle, file->offset));
 }
 
 ssize_t FSFILE_Write(FSFILE *file, void *buffer, size_t size, bool resize)
