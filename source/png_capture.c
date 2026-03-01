@@ -68,7 +68,7 @@ static inline void move_rename_screenshot(FsFileSystem *filesystem, uint64_t tim
 void png_capture(FsFileSystem *filesystem)
 {
     // File size for a full, uncompressed capture.
-    static const int64_t FILE_SIZE = 0x400000;
+    static const int64_t FILE_SIZE = 0x2A4470;
 
     png_structp writeStruct = NULL;
     png_infop infoStruct    = NULL;
