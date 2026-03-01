@@ -32,10 +32,9 @@ bool FSFILE_Delete(FsFileSystem *filesystem, const char *path)
     return R_SUCCEEDED(fsFsDeleteFile(filesystem, path));
 }
 
-FSFILE *FSFILE_Open(FsFileSystem *filesystem, const char *path)
+FSFILE *FSFILE_Open(FsFileSystem *filesystem, const char *path, int64_t CREATING_SIZE)
 {
     // Both of these are zero to start since we don't have any idea what the ending PNG size will be.
-    static const int64_t CREATING_SIZE    = 0;
     static const uint32_t CREATING_OPTION = 0;
 
     // Check if it exists. If it doesn't create it.
@@ -69,15 +68,21 @@ cleanup:
     return NULL;
 }
 
-ssize_t FSFILE_Write(FSFILE *file, void *buffer, size_t size)
+bool FSFILE_Resize(FSFILE *file) {
+    return R_FAILED(fsFileSetSize(&file->handle, file->offset));
+}
+
+ssize_t FSFILE_Write(FSFILE *file, void *buffer, size_t size, bool resize)
 {
     // Do not continue if we're not passed valid data.
     if (!file || !buffer) { return -1; }
 
-    // Update the size of the file.
-    const int64_t newSize = file->offset + size;
-    const bool sizeError  = R_FAILED(fsFileSetSize(&file->handle, newSize));
-    if (sizeError) { return -1; }
+    if (resize) {
+        // Update the size of the file.
+        const int64_t newSize = file->offset + size;
+        const bool sizeError  = R_FAILED(fsFileSetSize(&file->handle, newSize));
+        if (sizeError) { return -1; }
+    }
 
     // Attempt to write the data.
     const bool writeError = R_FAILED(fsFileWrite(&file->handle, file->offset, buffer, size, FsWriteOption_None));

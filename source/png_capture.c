@@ -75,7 +75,7 @@ void png_capture(FsFileSystem *filesystem)
     else if (!png_init_structs(&writeStruct, &infoStruct)) { return; }
 
     // Attempt to open temporary output file.
-    pngFile = FSFILE_Open(filesystem, TEMPORARY_NAME);
+    pngFile = FSFILE_Open(filesystem, TEMPORARY_NAME, 1024*1024*3);
     if (!pngFile) { goto cleanup; }
 
     // Initialize libpng to use our write functions and write the initial info.
@@ -98,6 +98,7 @@ void png_capture(FsFileSystem *filesystem)
 cleanup:
     // This will finalize writing and destroy the structs.
     png_cleanup(&writeStruct, &infoStruct);
+    FSFILE_Resize(pngFile);
     FSFILE_Close(pngFile);
     capsscCloseRawScreenShotReadStream();
 
@@ -117,7 +118,7 @@ cleanup:
 static void png_write_function(png_structp writingStruct, png_bytep pngData, png_size_t length)
 {
     FSFILE *fsfile = (FSFILE *)png_get_io_ptr(writingStruct);
-    FSFILE_Write(fsfile, pngData, length);
+    FSFILE_Write(fsfile, pngData, length, false);
 }
 
 static void png_flush_function(png_structp writingStruct)

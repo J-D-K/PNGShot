@@ -23,14 +23,19 @@ bool FSFILE_Delete(FsFileSystem *filesystem, const char *path);
 /// failure.
 /// @param filesystem Filesystem to open the file from.
 /// @param filePath Path to open.
-FSFILE *FSFILE_Open(FsFileSystem *filesystem, const char *path);
+FSFILE *FSFILE_Open(FsFileSystem *filesystem, const char *path, int64_t CREATING_SIZE);
 
 /// @brief Attempts to write the buffer to the FSFILE passed.
 /// @param file File to write to.FSFILE *file,
 /// @param buffer Buffer to write.
 /// @param size Size of the buffer to write.
 /// @return Bytes written on success. -1 on failure.
-ssize_t FSFILE_Write(FSFILE *file, void *buffer, size_t size);
+ssize_t FSFILE_Write(FSFILE *file, void *buffer, size_t size, bool resize);
+
+/// @brief Attempts to resize file to offset stored in FSFILE.
+/// @param file File to resize;
+/// @return True on success. False on failure.
+bool FSFILE_Resize(FSFILE *file);
 
 /// @brief Flushes the file passed.
 /// @param file File to flush.
