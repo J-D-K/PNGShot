@@ -8,18 +8,23 @@
 #include <string.h>
 #include <switch.h>
 
-/// @brief Whether or not to allow jpeg captures. False by default.
-static bool allowJpegs = false;
-
-/// @brief The compression level. 4 by default.
-static int compressionLevel = 4;
+/// @brief Single config struct to contain the config better.
+static ConfigStruct s_configStruct;
 
 void config_load(void)
 {
+    // Set defaults.
+    s_configStruct.allowJpegs   = false;
+    s_configStruct.webpLossless = false;
+    s_configStruct.pngLevel     = 4;
+    s_configStruct.webpLevel    = 2;
+
     // Config path.
-    static const char *CONFIG_PATH           = "/config/PNGShot/config.json";
-    static const char *KEY_ALLOW_JPEG        = "AllowJPEGs";
-    static const char *KEY_COMPRESSION_LEVEL = "CompressionLevel";
+    static const char *CONFIG_PATH       = "/config/PNGShot/config.json";
+    static const char *KEY_ALLOW_JPEG    = "AllowJPEGs";
+    static const char *KEY_LOSSLESS_WEBP = "LosslessWebP";
+    static const char *KEY_PNG_LEVEL     = "PNGLevel";
+    static const char *KEY_WEBP_LEVEL    = "WebpLevel";
 
     // Open the sdmc.
     FsFileSystem sdmc     = {0};
@@ -56,15 +61,20 @@ void config_load(void)
         const json_object *value = json_object_iter_peek_value(&current);
 
         // Key eval.
-        const bool keyJpegs       = strcmp(key, KEY_ALLOW_JPEG) == 0;
-        const bool keyCompression = !keyJpegs && strcmp(key, KEY_COMPRESSION_LEVEL) == 0;
+        const bool keyJpegs        = strcmp(key, KEY_ALLOW_JPEG) == 0;
+        const bool keyCompression  = !keyJpegs && strcmp(key, KEY_PNG_LEVEL) == 0;
+        const bool keyLosslessWebp = !keyCompression && strcmp(key, KEY_LOSSLESS_WEBP) == 0;
+        const bool keyWebpLevel    = !keyLosslessWebp && strcmp(key, KEY_WEBP_LEVEL) == 0;
 
-        if (keyJpegs) { allowJpegs = json_object_get_boolean(value); }
-        else if (keyCompression) { compressionLevel = json_object_get_uint64(value); }
+        if (keyJpegs) { s_configStruct.allowJpegs = json_object_get_boolean(value); }
+        else if (keyCompression) { s_configStruct.pngLevel = json_object_get_uint64(value); }
+        else if (keyLosslessWebp) { s_configStruct.webpLossless = json_object_get_boolean(value); }
+        else if (keyWebpLevel) { s_configStruct.webpLevel = json_object_get_uint64(value); }
     }
 
     // Take care of funny business.
-    if (compressionLevel > 9) { compressionLevel = 4; }
+    if (s_configStruct.pngLevel > 9) { s_configStruct.pngLevel = 4; }
+    if (s_configStruct.webpLevel > 6) { s_configStruct.webpLevel = 2; }
 
 cleanup:
     if (config) { FSFILE_Close(config); }
@@ -73,6 +83,4 @@ cleanup:
     fsFsClose(&sdmc);
 }
 
-bool config_allow_jpeg(void) { return allowJpegs; }
-
-int config_compression_level(void) { return compressionLevel; }
+const ConfigStruct *config_get(void) { return &s_configStruct; }

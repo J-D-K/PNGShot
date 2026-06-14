@@ -1,7 +1,7 @@
 #include "FSFILE.h"
+#include "capture.h"
 #include "config.h"
 #include "init.h"
-#include "png_capture.h"
 
 #include <stdbool.h>
 #include <stdio.h>
@@ -115,7 +115,7 @@ int main(void)
         }
         else if (validPress)
         {
-            png_capture(&albumDir);
+            capture(&albumDir);
             captureHeld = false;
         }
         else

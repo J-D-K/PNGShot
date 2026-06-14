@@ -1,9 +1,12 @@
 #include "FSFILE.h"
+#include "capssc.h"
+#include "capture.h"
 #include "config.h"
 #include "fsdir.h"
 #include "jpeg.h"
+#include "rgba.h"
+#include "screenshot.h"
 
-#include <arm_neon.h>
 #include <ctype.h> // Include for tolower
 #include <malloc.h>
 #include <png.h>
@@ -14,10 +17,6 @@
 #include <switch.h>
 #include <time.h>
 
-// These are used in a couple of different places.
-static const int SCREENSHOT_WIDTH  = 1280;
-static const int SCREENSHOT_HEIGHT = 720;
-
 // This is a temporary name used to write the PNG. It's moved and renamed afterwards.
 static const char *TEMPORARY_NAME = "/PNGs/temp.png";
 
@@ -26,15 +25,6 @@ static const char *TEMPORARY_NAME = "/PNGs/temp.png";
 // These are needed to make libpng work with the raw FS commands.
 static void png_write_function(png_structp writingStruct, png_bytep pngData, png_size_t length);
 static void png_flush_function(png_structp writingStruct);
-
-/// @brief Attempts to open the capssc capture stream. Returns false on failure.
-static inline bool capssc_open_stream();
-
-/// @brief Reads a row from the stream into the buffer passed.
-/// @param buffer Row buffer to read into.
-/// @param rowIndex Current row height-wise to read.
-/// @return True on success. False on failure.
-static inline bool capssc_read_row(void *buffer, int rowIndex);
 
 /// @brief Initializes the structs for PNG writing. Returns false on failure.
 /// @param writeStruct Pointer to writing struct pointer.
@@ -51,10 +41,6 @@ static inline void png_cleanup(png_structpp writeStruct, png_infopp infoStruct);
 /// @param file FSFILE we're writing to.
 static inline void png_init_io_write_info(png_structp writeStruct, png_infop infoStruct, FSFILE *file);
 
-/// @brief Shifts all of the bytes over in the row passed and "deletes" the alpha value from the screenshot since it's not
-/// needed.
-static inline void rgba_strip_alpha(restrict png_bytep row);
-
 /// @brief Creates the end target directory for the screenshot to go to.
 /// @param timestamp Timestamp to use to generate the path.
 static inline bool create_target_directory(FsFileSystem *filesystem, uint64_t timestamp);
@@ -65,7 +51,7 @@ static inline bool create_target_directory(FsFileSystem *filesystem, uint64_t ti
 static inline void move_rename_screenshot(FsFileSystem *filesystem, uint64_t timestamp);
 
 // Same as above, but safer and less memory hungry for a Switch sysmodule
-void png_capture(FsFileSystem *filesystem)
+void capture(FsFileSystem *albumDir)
 {
     // File size for a full, uncompressed capture.
     static const int64_t FILE_SIZE = 0x2A4470;
@@ -80,7 +66,7 @@ void png_capture(FsFileSystem *filesystem)
     else if (!png_init_structs(&writeStruct, &infoStruct)) { return; }
 
     // Attempt to open temporary output file.
-    pngFile = FSFILE_OpenWrite(filesystem, TEMPORARY_NAME, FILE_SIZE);
+    pngFile = FSFILE_OpenWrite(albumDir, TEMPORARY_NAME, FILE_SIZE);
     if (!pngFile) { goto cleanup; }
 
     // Initialize libpng to use our write functions and write the initial info.
@@ -107,16 +93,17 @@ cleanup:
     capsscCloseRawScreenShotReadStream();
 
     FsTimeStampRaw timestamp;
-    if (R_FAILED(fsFsGetFileTimeStampRaw(filesystem, TEMPORARY_NAME, &timestamp))) { return; }
+    if (R_FAILED(fsFsGetFileTimeStampRaw(albumDir, TEMPORARY_NAME, &timestamp))) { return; }
 
     // Ensure the final directory exists.
-    if (!create_target_directory(filesystem, timestamp.created)) { return; }
+    if (!create_target_directory(albumDir, timestamp.created)) { return; }
 
     // Move the screenshot.
-    move_rename_screenshot(filesystem, timestamp.created);
+    move_rename_screenshot(albumDir, timestamp.created);
 
     // Delete the jpeg if needed.
-    if (!config_allow_jpeg()) { jpeg_delete_capture(filesystem, timestamp.created); }
+    const ConfigStruct *config = config_get();
+    if (!config->allowJpegs) { jpeg_delete_capture(albumDir, timestamp.created); }
 }
 
 static void png_write_function(png_structp writingStruct, png_bytep pngData, png_size_t length)
@@ -131,30 +118,6 @@ static void png_flush_function(png_structp writingStruct)
     FSFILE_Flush(fsfile);
 }
 
-static inline bool capssc_open_stream()
-{
-    // The timeout for screen capture
-    static const int64_t SCREENSHOT_CAPTURE_TIMEOUT = 1e+8;
-
-    uint64_t size;
-    uint64_t width;
-    uint64_t height;
-    const bool opened = R_SUCCEEDED(
-        capsscOpenRawScreenShotReadStream(&size, &width, &height, ViLayerStack_Screenshot, SCREENSHOT_CAPTURE_TIMEOUT));
-    return opened;
-}
-
-static inline bool capssc_read_row(void *buffer, int rowOffset)
-{
-    // This is always the same.
-    static const size_t ROW_SIZE = SCREENSHOT_WIDTH * 4; // Each row is RGBA.
-
-    // Read the row at the offset.
-    uint64_t bytesRead;
-    const bool rowRead = R_SUCCEEDED(capsscReadRawScreenShotReadStream(&bytesRead, buffer, ROW_SIZE, rowOffset * ROW_SIZE));
-    return rowRead && bytesRead == ROW_SIZE;
-}
-
 static inline bool png_init_structs(png_structpp writeStruct, png_infopp infoStruct)
 {
     *writeStruct = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
@@ -167,8 +130,8 @@ static inline bool png_init_structs(png_structpp writeStruct, png_infopp infoStr
         return false;
     }
 
-    const int level = config_compression_level();
-    png_set_compression_level(*writeStruct, level);
+    const ConfigStruct *config = config_get();
+    png_set_compression_level(*writeStruct, config->pngLevel);
 
     return true;
 }
@@ -203,26 +166,6 @@ static inline void png_init_io_write_info(png_structp writeStruct, png_infop inf
 
     // Write the info.
     png_write_info(writeStruct, infoStruct);
-}
-
-static inline void rgba_strip_alpha(restrict png_bytep row)
-{
-    int i = 0;
-    int j = 0;
-
-    for (; i <= (SCREENSHOT_WIDTH - 16) * 4; i += 64, j += 48)
-    {
-        uint8x16x4_t rgba = vld4q_u8(row + i);
-        uint8x16x3_t rgb  = {{rgba.val[0], rgba.val[1], rgba.val[2]}};
-        vst3q_u8(row + j, rgb);
-    }
-
-    for (; i < SCREENSHOT_WIDTH * 4; i += 4, j += 3)
-    {
-        row[j]     = row[i];
-        row[j + 1] = row[i + 1];
-        row[j + 2] = row[i + 2];
-    }
 }
 
 static inline bool create_target_directory(FsFileSystem *filesystem, uint64_t timestamp)
